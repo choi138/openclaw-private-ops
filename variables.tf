@@ -74,38 +74,43 @@ variable "wg_host" {
   default     = null
 }
 
-variable "wgeasy_password" {
+variable "wgeasy_password_secret" {
   type        = string
-  description = "Plaintext admin password. On boot, a bcrypt hash is generated (wgpw) and stored as PASSWORD_HASH. Set exactly one of wgeasy_password or wgeasy_password_hash."
+  description = "Secret Manager reference for plaintext wg-easy admin password. Format: projects/<project>/secrets/<name> or projects/<project>/secrets/<name>/versions/<version>."
   default     = null
-  sensitive   = true
 
   validation {
-    condition     = var.wgeasy_password == null || trimspace(var.wgeasy_password) != ""
-    error_message = "wgeasy_password must not be empty when set."
-  }
-}
-
-variable "wgeasy_password_hash" {
-  type        = string
-  description = "bcrypt password hash for wg-easy (PASSWORD_HASH). Recommended if you want to avoid plaintext on the VM. Set exactly one of wgeasy_password or wgeasy_password_hash."
-  default     = null
-  sensitive   = true
-
-  validation {
-    condition     = var.wgeasy_password_hash == null || trimspace(var.wgeasy_password_hash) != ""
-    error_message = "wgeasy_password_hash must not be empty when set."
-  }
-}
-
-check "wgeasy_password_exclusive" {
-  assert {
-    condition = (
-      (var.wgeasy_password == null ? "" : trimspace(var.wgeasy_password)) != ""
-      ) != (
-      (var.wgeasy_password_hash == null ? "" : trimspace(var.wgeasy_password_hash)) != ""
+    condition = var.wgeasy_password_secret == null || (
+      trimspace(var.wgeasy_password_secret) != "" &&
+      can(regex("^projects/[^/]+/secrets/[^/]+(?:/versions/[^/]+)?$", trimspace(var.wgeasy_password_secret)))
     )
-    error_message = "Set exactly one of wgeasy_password or wgeasy_password_hash."
+    error_message = "wgeasy_password_secret must match projects/<project>/secrets/<name>[/versions/<version>]."
+  }
+}
+
+variable "wgeasy_password_hash_secret" {
+  type        = string
+  description = "Secret Manager reference for wg-easy PASSWORD_HASH. Format: projects/<project>/secrets/<name> or projects/<project>/secrets/<name>/versions/<version>."
+  default     = null
+
+  validation {
+    condition = var.wgeasy_password_hash_secret == null || (
+      trimspace(var.wgeasy_password_hash_secret) != "" &&
+      can(regex("^projects/[^/]+/secrets/[^/]+(?:/versions/[^/]+)?$", trimspace(var.wgeasy_password_hash_secret)))
+    )
+    error_message = "wgeasy_password_hash_secret must match projects/<project>/secrets/<name>[/versions/<version>]."
+  }
+}
+
+check "wgeasy_password_secret_exclusive" {
+  assert {
+    condition = length([
+      for value in [
+        var.wgeasy_password_secret == null ? "" : trimspace(var.wgeasy_password_secret),
+        var.wgeasy_password_hash_secret == null ? "" : trimspace(var.wgeasy_password_hash_secret)
+      ] : value if value != ""
+    ]) == 1
+    error_message = "Set exactly one source: wgeasy_password_secret or wgeasy_password_hash_secret."
   }
 }
 
@@ -150,14 +155,16 @@ variable "openclaw_gateway_port" {
   }
 }
 
-variable "openclaw_gateway_password" {
+variable "openclaw_gateway_password_secret" {
   type        = string
-  description = "Gateway password for OpenClaw (required)."
-  sensitive   = true
+  description = "Secret Manager reference for OpenClaw gateway password. Format: projects/<project>/secrets/<name> or projects/<project>/secrets/<name>/versions/<version>."
 
   validation {
-    condition     = trimspace(var.openclaw_gateway_password) != ""
-    error_message = "openclaw_gateway_password must be set."
+    condition = (
+      trimspace(var.openclaw_gateway_password_secret) != "" &&
+      can(regex("^projects/[^/]+/secrets/[^/]+(?:/versions/[^/]+)?$", trimspace(var.openclaw_gateway_password_secret)))
+    )
+    error_message = "openclaw_gateway_password_secret must match projects/<project>/secrets/<name>[/versions/<version>]."
   }
 }
 
@@ -172,11 +179,18 @@ variable "openclaw_version" {
   }
 }
 
-variable "openclaw_anthropic_api_key" {
+variable "openclaw_anthropic_api_key_secret" {
   type        = string
-  description = "Anthropic API key for OpenClaw (optional; set via TF_VAR_openclaw_anthropic_api_key)."
-  default     = ""
-  sensitive   = true
+  description = "Secret Manager reference for Anthropic API key. Format: projects/<project>/secrets/<name> or projects/<project>/secrets/<name>/versions/<version>."
+  default     = null
+
+  validation {
+    condition = var.openclaw_anthropic_api_key_secret == null || (
+      trimspace(var.openclaw_anthropic_api_key_secret) != "" &&
+      can(regex("^projects/[^/]+/secrets/[^/]+(?:/versions/[^/]+)?$", trimspace(var.openclaw_anthropic_api_key_secret)))
+    )
+    error_message = "openclaw_anthropic_api_key_secret must match projects/<project>/secrets/<name>[/versions/<version>]."
+  }
 }
 
 variable "openclaw_model_primary" {
@@ -201,11 +215,18 @@ variable "openclaw_model_fallbacks" {
   }
 }
 
-variable "openclaw_telegram_bot_token" {
+variable "openclaw_telegram_bot_token_secret" {
   type        = string
-  description = "Telegram bot token for OpenClaw (optional)."
+  description = "Secret Manager reference for Telegram bot token. Format: projects/<project>/secrets/<name> or projects/<project>/secrets/<name>/versions/<version>."
   default     = null
-  sensitive   = true
+
+  validation {
+    condition = var.openclaw_telegram_bot_token_secret == null || (
+      trimspace(var.openclaw_telegram_bot_token_secret) != "" &&
+      can(regex("^projects/[^/]+/secrets/[^/]+(?:/versions/[^/]+)?$", trimspace(var.openclaw_telegram_bot_token_secret)))
+    )
+    error_message = "openclaw_telegram_bot_token_secret must match projects/<project>/secrets/<name>[/versions/<version>]."
+  }
 }
 
 variable "openclaw_enable_public_ip" {

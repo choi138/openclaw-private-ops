@@ -3,6 +3,39 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+fetch_secret() {
+  local secret_version="$1"
+  local token response data_b64 value
+
+  token="$(curl -fsS -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+    | sed -n 's/.*"access_token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  if [ -z "$token" ]; then
+    echo "Failed to get metadata access token for Secret Manager." >&2
+    return 1
+  fi
+
+  response="$(curl -fsS -H "Authorization: Bearer $token" \
+    "https://secretmanager.googleapis.com/v1/$secret_version:access")" || {
+    echo "Failed to access secret version: $secret_version" >&2
+    return 1
+  }
+
+  data_b64="$(printf '%s' "$response" | tr -d '\n' | sed -n 's/.*"data"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  if [ -z "$data_b64" ]; then
+    echo "Secret payload was empty for: $secret_version" >&2
+    return 1
+  fi
+
+  value="$(printf '%s' "$data_b64" | tr '_-' '/+' | base64 -d 2>/dev/null || true)"
+  if [ -z "$value" ]; then
+    echo "Failed to decode secret payload for: $secret_version" >&2
+    return 1
+  fi
+
+  printf '%s' "$value"
+}
+
 # Ensure SSH server is installed and host keys exist (helps internal access).
 if ! dpkg -s openssh-server >/dev/null 2>&1; then
   apt-get update -y
@@ -31,21 +64,21 @@ if ! command -v openclaw >/dev/null 2>&1; then
   npm config set progress false
   npm config set update-notifier false
   NPM_ROOT="$(npm root -g 2>/dev/null || true)"
-  if [ -z "$${NPM_ROOT}" ]; then
+  if [ -z "$NPM_ROOT" ]; then
     NPM_ROOT="/usr/lib/node_modules"
   fi
-  if [ -d "$${NPM_ROOT}/openclaw" ]; then
-    rm -rf "$${NPM_ROOT}/openclaw"
+  if [ -d "$NPM_ROOT/openclaw" ]; then
+    rm -rf "$NPM_ROOT/openclaw"
   fi
   npm install -g openclaw@${openclaw_version} --omit=dev --no-audit --no-fund
 fi
 
 # Resolve OpenClaw binary path (npm global bin can be /usr/bin or /usr/local/bin).
 OPENCLAW_BIN="$(command -v openclaw || true)"
-if [ -z "$${OPENCLAW_BIN}" ]; then
+if [ -z "$OPENCLAW_BIN" ]; then
   NPM_BIN="$(npm bin -g 2>/dev/null || true)"
-  if [ -n "$${NPM_BIN}" ] && [ -x "$${NPM_BIN}/openclaw" ]; then
-    OPENCLAW_BIN="$${NPM_BIN}/openclaw"
+  if [ -n "$NPM_BIN" ] && [ -x "$NPM_BIN/openclaw" ]; then
+    OPENCLAW_BIN="$NPM_BIN/openclaw"
   elif [ -x /usr/bin/openclaw ]; then
     OPENCLAW_BIN="/usr/bin/openclaw"
   elif [ -x /usr/local/bin/openclaw ]; then
@@ -53,7 +86,7 @@ if [ -z "$${OPENCLAW_BIN}" ]; then
   fi
 fi
 
-if [ -z "$${OPENCLAW_BIN}" ]; then
+if [ -z "$OPENCLAW_BIN" ]; then
   echo "OpenClaw CLI not found after install." >&2
   exit 1
 fi
@@ -67,21 +100,44 @@ install -d -m 700 -o openclaw -g openclaw /home/openclaw/.openclaw
 install -d -m 700 -o openclaw -g openclaw /home/openclaw/.openclaw/state
 install -d -m 700 /opt/openclaw
 
-if [ -z "${openclaw_gateway_password}" ]; then
-  echo "OpenClaw gateway password is required." >&2
+OPENCLAW_GATEWAY_PASSWORD_VALUE="$(fetch_secret "${openclaw_gateway_password_secret_version}")" || {
+  echo "Unable to read openclaw_gateway_password_secret_version from Secret Manager." >&2
+  exit 1
+}
+
+if [ -z "$OPENCLAW_GATEWAY_PASSWORD_VALUE" ]; then
+  echo "OpenClaw gateway password is required from Secret Manager." >&2
   exit 1
 fi
 
+OPENCLAW_ANTHROPIC_API_KEY_VALUE=""
+%{ if openclaw_anthropic_api_key_secret_version != "" }
+OPENCLAW_ANTHROPIC_API_KEY_VALUE="$(fetch_secret "${openclaw_anthropic_api_key_secret_version}")" || {
+  echo "Unable to read openclaw_anthropic_api_key_secret_version from Secret Manager." >&2
+  exit 1
+}
+%{ endif }
+
+OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE=""
+%{ if openclaw_telegram_bot_token_secret_version != "" }
+OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE="$(fetch_secret "${openclaw_telegram_bot_token_secret_version}")" || {
+  echo "Unable to read openclaw_telegram_bot_token_secret_version from Secret Manager." >&2
+  exit 1
+}
+%{ endif }
+
 # Environment file to avoid shell expansion of secrets.
 cat > /opt/openclaw/openclaw.env <<'ENVEOF'
-OPENCLAW_GATEWAY_PASSWORD=${openclaw_gateway_password}
-%{ if openclaw_anthropic_api_key != "" }
-ANTHROPIC_API_KEY=${openclaw_anthropic_api_key}
-%{ endif }
-%{ if openclaw_telegram_bot_token != "" }
-TELEGRAM_BOT_TOKEN=${openclaw_telegram_bot_token}
-%{ endif }
 ENVEOF
+printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' "$OPENCLAW_GATEWAY_PASSWORD_VALUE" >> /opt/openclaw/openclaw.env
+
+if [ -n "$OPENCLAW_ANTHROPIC_API_KEY_VALUE" ]; then
+  printf 'ANTHROPIC_API_KEY=%s\n' "$OPENCLAW_ANTHROPIC_API_KEY_VALUE" >> /opt/openclaw/openclaw.env
+fi
+
+if [ -n "$OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE" ]; then
+  printf 'TELEGRAM_BOT_TOKEN=%s\n' "$OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE" >> /opt/openclaw/openclaw.env
+fi
 
 chmod 600 /opt/openclaw/openclaw.env
 
@@ -98,9 +154,8 @@ cat > /home/openclaw/.openclaw/openclaw.json <<'JSON'
   },
   "channels": {
     "telegram": {
-%{ if openclaw_telegram_bot_token != "" }
+%{ if openclaw_telegram_enabled }
       "enabled": true,
-      "botToken": "${openclaw_telegram_bot_token}",
 %{ else }
       "enabled": false,
 %{ endif }
@@ -147,7 +202,7 @@ Group=openclaw
 Environment=OPENCLAW_CONFIG_PATH=/home/openclaw/.openclaw/openclaw.json
 Environment=OPENCLAW_STATE_DIR=/home/openclaw/.openclaw/state
 EnvironmentFile=/opt/openclaw/openclaw.env
-ExecStart=$${OPENCLAW_BIN} gateway
+ExecStart=$OPENCLAW_BIN gateway
 Restart=always
 RestartSec=5
 
