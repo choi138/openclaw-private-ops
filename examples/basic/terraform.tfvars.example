@@ -14,18 +14,19 @@ wgeasy_ui_port  = 51821
 # Optional: use a DNS name instead of the static IP
 # wg_host = "vpn.example.com"
 
-# Choose exactly one:
-wgeasy_password = "CHANGE_ME_LONG_PASSWORD"
-# wgeasy_password_hash = "$2y$10$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-# Hash generator (local): docker run --rm ghcr.io/wg-easy/wg-easy:14 wgpw 'YOUR_PASSWORD'
+# Choose exactly one source for wg-easy credentials
+wgeasy_password_secret = "projects/YOUR_GCP_PROJECT_ID/secrets/wgeasy-password"
+# wgeasy_password_hash_secret = "projects/YOUR_GCP_PROJECT_ID/secrets/wgeasy-password-hash"
 
 # Optional: enable project-wide OS Login (single metadata item)
 # enable_project_oslogin = true
 
 # OpenClaw (VPN-only)
-openclaw_gateway_password = "CHANGE_ME_STRONG_PASSWORD"
+openclaw_gateway_password_secret = "projects/YOUR_GCP_PROJECT_ID/secrets/openclaw-gateway-password"
+
+# Optional OpenClaw settings
 # openclaw_gateway_port = 18789
 # openclaw_version = "2026.1.30"
-# openclaw_anthropic_api_key = "YOUR_ANTHROPIC_API_KEY" # or use TF_VAR_openclaw_anthropic_api_key
-# openclaw_telegram_bot_token = "123456:ABCDEF..."
+# openclaw_anthropic_api_key_secret = "projects/YOUR_GCP_PROJECT_ID/secrets/openclaw-anthropic-api-key"
+# openclaw_telegram_bot_token_secret = "projects/YOUR_GCP_PROJECT_ID/secrets/openclaw-telegram-token"
 # openclaw_enable_public_ip = false

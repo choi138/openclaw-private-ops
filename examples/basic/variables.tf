@@ -45,16 +45,14 @@ variable "wg_host" {
   default = null
 }
 
-variable "wgeasy_password" {
-  type      = string
-  default   = null
-  sensitive = true
+variable "wgeasy_password_secret" {
+  type    = string
+  default = null
 }
 
-variable "wgeasy_password_hash" {
-  type      = string
-  default   = null
-  sensitive = true
+variable "wgeasy_password_hash_secret" {
+  type    = string
+  default = null
 }
 
 variable "enable_project_oslogin" {
@@ -82,15 +80,13 @@ variable "openclaw_gateway_port" {
   default = 18789
 }
 
-variable "openclaw_gateway_password" {
-  type      = string
-  sensitive = true
+variable "openclaw_gateway_password_secret" {
+  type = string
 }
 
-variable "openclaw_anthropic_api_key" {
-  type      = string
-  default   = ""
-  sensitive = true
+variable "openclaw_anthropic_api_key_secret" {
+  type    = string
+  default = null
 }
 
 variable "openclaw_model_primary" {
@@ -103,10 +99,9 @@ variable "openclaw_model_fallbacks" {
   default = ["anthropic/claude-opus-4-5"]
 }
 
-variable "openclaw_telegram_bot_token" {
-  type      = string
-  default   = null
-  sensitive = true
+variable "openclaw_telegram_bot_token_secret" {
+  type    = string
+  default = null
 }
 
 variable "openclaw_enable_public_ip" {
