@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,8 @@ type statusRecorder struct {
 	http.ResponseWriter
 	status int
 }
+
+var uuidPattern = regexp.MustCompile(`^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[1-5][a-fA-F0-9]{3}-[89abAB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$`)
 
 func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
@@ -76,8 +80,18 @@ func parseResource(path string) (string, string) {
 
 	resourceType := parts[1]
 	resourceID := ""
-	if len(parts) >= 3 {
+	if len(parts) >= 3 && looksLikeIdentifier(parts[2]) {
 		resourceID = parts[2]
 	}
 	return resourceType, resourceID
+}
+
+func looksLikeIdentifier(v string) bool {
+	if v == "" {
+		return false
+	}
+	if _, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return true
+	}
+	return uuidPattern.MatchString(v)
 }

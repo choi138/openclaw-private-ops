@@ -63,6 +63,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_created
 CREATE INDEX IF NOT EXISTS idx_request_attempts_created_success
   ON request_attempts(created_at, success);
 
+CREATE INDEX IF NOT EXISTS idx_request_attempts_conversation_created
+  ON request_attempts(conversation_id, created_at);
+
 CREATE INDEX IF NOT EXISTS idx_conversations_account_started
   ON conversations(account_id, started_at);
 

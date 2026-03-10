@@ -27,14 +27,66 @@ func TestWithBearerAuthRejectsInvalidToken(t *testing.T) {
 func TestWithBearerAuthPassesValidToken(t *testing.T) {
 	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actor := middleware.ActorFromContext(r.Context())
-		if actor == "" {
-			t.Fatalf("expected actor in context")
+		if actor != "admin" {
+			t.Fatalf("expected actor admin in context, got %q", actor)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}), "expected-token")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "Bearer expected-token")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rr.Code)
+	}
+}
+
+func TestWithBearerAuthRejectsMissingAuthorizationHeader(t *testing.T) {
+	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "expected-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+}
+
+func TestWithBearerAuthRejectsTokenWithoutBearerPrefix(t *testing.T) {
+	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "expected-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
+	req.Header.Set("Authorization", "expected-token")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+}
+
+func TestWithBearerAuthIgnoresActorHeader(t *testing.T) {
+	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		actor := middleware.ActorFromContext(r.Context())
+		if actor != "admin" {
+			t.Fatalf("expected actor admin in context, got %q", actor)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}), "expected-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
+	req.Header.Set("Authorization", "Bearer expected-token")
+	req.Header.Set("X-Actor-ID", "spoofed")
 	rr := httptest.NewRecorder()
 
 	h.ServeHTTP(rr, req)

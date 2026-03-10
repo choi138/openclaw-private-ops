@@ -49,7 +49,6 @@ func TestProtectedRouteWritesAuditLog(t *testing.T) {
 	to := time.Now().UTC().Format(time.RFC3339)
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary?from="+from+"&to="+to, nil)
 	req.Header.Set("Authorization", "Bearer test-token")
-	req.Header.Set("X-Actor-ID", "ops-admin")
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -61,8 +60,37 @@ func TestProtectedRouteWritesAuditLog(t *testing.T) {
 	if len(events) == 0 {
 		t.Fatalf("expected at least one audit event")
 	}
-	if events[0].Actor != "ops-admin" {
-		t.Fatalf("expected actor ops-admin, got %q", events[0].Actor)
+	if events[0].Actor != "admin" {
+		t.Fatalf("expected actor admin, got %q", events[0].Actor)
+	}
+	if events[0].ResourceID != "" {
+		t.Fatalf("expected empty resource id for static route, got %q", events[0].ResourceID)
+	}
+}
+
+func TestProtectedConversationRouteWritesPathIdentifierToAuditLog(t *testing.T) {
+	store := memory.NewStore()
+	h := httpapi.NewRouter(config.Config{AdminToken: "test-token"}, testDependencies(store), testLogger())
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/conversations/1", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	events := store.AuditEvents()
+	if len(events) == 0 {
+		t.Fatalf("expected at least one audit event")
+	}
+	last := events[len(events)-1]
+	if last.ResourceType != "conversations" {
+		t.Fatalf("expected resource type conversations, got %q", last.ResourceType)
+	}
+	if last.ResourceID != "1" {
+		t.Fatalf("expected resource id 1, got %q", last.ResourceID)
 	}
 }
 

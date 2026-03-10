@@ -269,7 +269,7 @@ func (s *Store) ListSnapshots(_ context.Context, from, to time.Time, pagination 
 func (s *Store) InsertReadAudit(_ context.Context, event domain.AuditEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.audits = append(s.audits, event)
+	s.audits = append(s.audits, cloneAuditEvent(event))
 	return nil
 }
 
@@ -277,7 +277,9 @@ func (s *Store) AuditEvents() []domain.AuditEvent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]domain.AuditEvent, len(s.audits))
-	copy(out, s.audits)
+	for i, event := range s.audits {
+		out[i] = cloneAuditEvent(event)
+	}
 	return out
 }
 
@@ -321,4 +323,42 @@ func paginate[T any](items []T, p domain.Pagination) []T {
 		end = len(items)
 	}
 	return items[start:end]
+}
+
+func cloneAuditEvent(event domain.AuditEvent) domain.AuditEvent {
+	event.Metadata = cloneMap(event.Metadata)
+	return event
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = cloneValue(value)
+	}
+	return out
+}
+
+func cloneSlice(in []any) []any {
+	if in == nil {
+		return nil
+	}
+	out := make([]any, len(in))
+	for i, value := range in {
+		out[i] = cloneValue(value)
+	}
+	return out
+}
+
+func cloneValue(v any) any {
+	switch value := v.(type) {
+	case map[string]any:
+		return cloneMap(value)
+	case []any:
+		return cloneSlice(value)
+	default:
+		return value
+	}
 }

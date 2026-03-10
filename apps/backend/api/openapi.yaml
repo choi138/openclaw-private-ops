@@ -127,6 +127,19 @@ paths:
           required: true
           schema:
             type: integer
+        - in: query
+          name: page
+          description: Page number. Defaults to 1.
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: page_size
+          description: Page size. Defaults to 50 and is capped at 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
       responses:
         "200":
           description: Message list
@@ -139,6 +152,19 @@ paths:
           required: true
           schema:
             type: integer
+        - in: query
+          name: page
+          description: Page number. Defaults to 1.
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: page_size
+          description: Page size. Defaults to 50 and is capped at 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
       responses:
         "200":
           description: Attempt list

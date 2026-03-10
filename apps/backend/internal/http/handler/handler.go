@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -49,7 +50,22 @@ type API struct {
 	logger       *slog.Logger
 }
 
+var dateOnlyPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
 func New(deps Dependencies, logger *slog.Logger) *API {
+	if deps.Readiness == nil {
+		panic("handler.New requires Readiness")
+	}
+	if deps.Dashboard == nil {
+		panic("handler.New requires Dashboard")
+	}
+	if deps.Conversation == nil {
+		panic("handler.New requires Conversation")
+	}
+	if deps.Infra == nil {
+		panic("handler.New requires Infra")
+	}
+
 	return &API{
 		readiness:    deps.Readiness,
 		dashboard:    deps.Dashboard,
@@ -268,6 +284,9 @@ func parseTimeRange(r *http.Request, required bool) (time.Time, time.Time, error
 	to, err := parseTime(toRaw)
 	if err != nil {
 		return time.Time{}, time.Time{}, errors.New("to must be RFC3339 or YYYY-MM-DD")
+	}
+	if dateOnlyPattern.MatchString(toRaw) {
+		to = to.Add(24*time.Hour - time.Nanosecond)
 	}
 
 	if to.Before(from) {

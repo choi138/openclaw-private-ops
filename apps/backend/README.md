@@ -18,7 +18,8 @@ This directory contains the Go backend for internal Ops Console APIs.
 ## Environment variables
 - `OPS_API_ADDR` (default `:8080`)
 - `OPS_API_ADMIN_TOKEN` (required for protected routes)
-- `OPS_API_DB_DSN` (optional; if missing, memory mode is used)
+- `OPS_API_ALLOW_MEMORY_FALLBACK` (optional; default `false`)
+- `OPS_API_DB_DSN` (required unless `OPS_API_ALLOW_MEMORY_FALLBACK=true`)
 - `OPS_API_DB_DRIVER` (default `postgres`)
 - `OPS_API_READ_TIMEOUT_SEC` (default `10`)
 - `OPS_API_WRITE_TIMEOUT_SEC` (default `10`)
@@ -41,6 +42,9 @@ set +a
 ```bash
 go run ./cmd/api
 ```
+
+Use memory mode only for local smoke tests. In normal environments, leave
+`OPS_API_ALLOW_MEMORY_FALLBACK` unset and provide `OPS_API_DB_DSN`.
 
 ## Commands
 ```bash

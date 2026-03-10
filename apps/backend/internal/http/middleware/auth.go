@@ -39,12 +39,7 @@ func WithBearerAuth(next http.Handler, token string) http.Handler {
 			return
 		}
 
-		actor := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
-		if actor == "" {
-			actor = "admin"
-		}
-
-		ctx := context.WithValue(r.Context(), actorKey, actor)
+		ctx := context.WithValue(r.Context(), actorKey, "admin")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
