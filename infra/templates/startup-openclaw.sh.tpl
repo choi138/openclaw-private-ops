@@ -60,8 +60,12 @@ if ! command -v node >/dev/null 2>&1; then
   apt-get install -y nodejs
 fi
 
-# Install OpenClaw CLI if missing.
-if ! command -v openclaw >/dev/null 2>&1; then
+# Install or upgrade OpenClaw CLI to the pinned version.
+CURRENT_OPENCLAW_VERSION=""
+if command -v openclaw >/dev/null 2>&1; then
+  CURRENT_OPENCLAW_VERSION="$(npm list -g openclaw --depth=0 2>/dev/null | sed -n 's/.*openclaw@\([^ ]*\).*/\1/p' | head -n 1 || true)"
+fi
+if [ "$CURRENT_OPENCLAW_VERSION" != "${openclaw_version}" ]; then
   npm config set fund false
   npm config set audit false
   npm config set progress false
@@ -121,6 +125,14 @@ OPENCLAW_ANTHROPIC_API_KEY_VALUE="$(fetch_secret "${openclaw_anthropic_api_key_s
 }
 %{ endif }
 
+OPENCLAW_OPENAI_API_KEY_VALUE=""
+%{ if openclaw_openai_api_key_secret_version != "" }
+OPENCLAW_OPENAI_API_KEY_VALUE="$(fetch_secret "${openclaw_openai_api_key_secret_version}")" || {
+  echo "Unable to read openclaw_openai_api_key_secret_version from Secret Manager." >&2
+  exit 1
+}
+%{ endif }
+
 OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE=""
 %{ if openclaw_telegram_bot_token_secret_version != "" }
 OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE="$(fetch_secret "${openclaw_telegram_bot_token_secret_version}")" || {
@@ -136,6 +148,10 @@ printf 'OPENCLAW_GATEWAY_PASSWORD=%s\n' "$OPENCLAW_GATEWAY_PASSWORD_VALUE" >> /o
 
 if [ -n "$OPENCLAW_ANTHROPIC_API_KEY_VALUE" ]; then
   printf 'ANTHROPIC_API_KEY=%s\n' "$OPENCLAW_ANTHROPIC_API_KEY_VALUE" >> /opt/openclaw/openclaw.env
+fi
+
+if [ -n "$OPENCLAW_OPENAI_API_KEY_VALUE" ]; then
+  printf 'OPENAI_API_KEY=%s\n' "$OPENCLAW_OPENAI_API_KEY_VALUE" >> /opt/openclaw/openclaw.env
 fi
 
 if [ -n "$OPENCLAW_TELEGRAM_BOT_TOKEN_VALUE" ]; then
