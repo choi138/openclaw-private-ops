@@ -337,6 +337,10 @@ LIMIT $3 OFFSET $4
 }
 
 func (s *Store) InsertReadAudit(ctx context.Context, event domain.AuditEvent) error {
+	return s.InsertAuditEvent(ctx, event)
+}
+
+func (s *Store) InsertAuditEvent(ctx context.Context, event domain.AuditEvent) error {
 	const q = `
 INSERT INTO audit_events (actor, action, resource_type, resource_id, metadata_json, created_at)
 VALUES ($1, $2, $3, NULLIF($4, ''), $5::jsonb, $6)

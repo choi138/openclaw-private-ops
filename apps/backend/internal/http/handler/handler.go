@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/domain"
+	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/http/dto"
+	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/http/middleware"
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/repository"
 )
 
@@ -35,19 +37,45 @@ type InfraReader interface {
 	ListSnapshots(ctx context.Context, from, to time.Time, pagination domain.Pagination) ([]domain.InfraSnapshot, error)
 }
 
+type SecurityAnalyzer interface {
+	Analyze(ctx context.Context, input domain.SecurityAnalysisInput) (domain.SecurityAnalysisResult, error)
+	ListFindings(ctx context.Context, filter domain.SecurityFindingFilter) ([]domain.SecurityFinding, error)
+}
+
+type IngestWriter interface {
+	IngestConversationEvent(ctx context.Context, event domain.ConversationEventInput) (domain.IngestResult, error)
+	IngestInfraSnapshot(ctx context.Context, snapshot domain.InfraSnapshotInput) (domain.IngestResult, error)
+	IngestRequestAttempt(ctx context.Context, event domain.RequestAttemptEventInput) (domain.IngestResult, error)
+	GetStatus(ctx context.Context) (domain.IngestStatus, error)
+}
+
+type AuditWriter interface {
+	InsertAuditEvent(ctx context.Context, event domain.AuditEvent) error
+}
+
 type Dependencies struct {
-	Readiness    ReadinessChecker
-	Dashboard    DashboardReader
-	Conversation ConversationReader
-	Infra        InfraReader
+	Readiness            ReadinessChecker
+	Dashboard            DashboardReader
+	Conversation         ConversationReader
+	Infra                InfraReader
+	Security             SecurityAnalyzer
+	Ingest               IngestWriter
+	Audit                AuditWriter
+	IngestMaxBodyBytes   int64
+	SecurityMaxBodyBytes int64
 }
 
 type API struct {
-	readiness    ReadinessChecker
-	dashboard    DashboardReader
-	conversation ConversationReader
-	infra        InfraReader
-	logger       *slog.Logger
+	readiness            ReadinessChecker
+	dashboard            DashboardReader
+	conversation         ConversationReader
+	infra                InfraReader
+	security             SecurityAnalyzer
+	ingest               IngestWriter
+	audit                AuditWriter
+	ingestMaxBodyBytes   int64
+	securityMaxBodyBytes int64
+	logger               *slog.Logger
 }
 
 var dateOnlyPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
@@ -65,13 +93,24 @@ func New(deps Dependencies, logger *slog.Logger) *API {
 	if deps.Infra == nil {
 		panic("handler.New requires Infra")
 	}
+	if deps.Security == nil {
+		panic("handler.New requires Security")
+	}
+	if deps.Ingest == nil {
+		panic("handler.New requires Ingest")
+	}
 
 	return &API{
-		readiness:    deps.Readiness,
-		dashboard:    deps.Dashboard,
-		conversation: deps.Conversation,
-		infra:        deps.Infra,
-		logger:       logger,
+		readiness:            deps.Readiness,
+		dashboard:            deps.Dashboard,
+		conversation:         deps.Conversation,
+		infra:                deps.Infra,
+		security:             deps.Security,
+		ingest:               deps.Ingest,
+		audit:                deps.Audit,
+		ingestMaxBodyBytes:   deps.IngestMaxBodyBytes,
+		securityMaxBodyBytes: deps.SecurityMaxBodyBytes,
+		logger:               logger,
 	}
 }
 
@@ -269,6 +308,97 @@ func (a *API) InfraSnapshots(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (a *API) IngestConversationEvents(w http.ResponseWriter, r *http.Request) {
+	event, err := dto.DecodeConversationEvent(r, a.ingestMaxBodyBytes)
+	if err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	result, err := a.ingest.IngestConversationEvent(r.Context(), event)
+	writeIngestResponse(w, result, err)
+}
+
+func (a *API) IngestInfraSnapshot(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := dto.DecodeInfraSnapshot(r, a.ingestMaxBodyBytes)
+	if err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	result, err := a.ingest.IngestInfraSnapshot(r.Context(), snapshot)
+	writeIngestResponse(w, result, err)
+}
+
+func (a *API) IngestRequestAttempt(w http.ResponseWriter, r *http.Request) {
+	event, err := dto.DecodeRequestAttemptEvent(r, a.ingestMaxBodyBytes)
+	if err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	result, err := a.ingest.IngestRequestAttempt(r.Context(), event)
+	writeIngestResponse(w, result, err)
+}
+
+func (a *API) IngestStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := a.ingest.GetStatus(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load ingest status")
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (a *API) AnalyzeSecurityTfvars(w http.ResponseWriter, r *http.Request) {
+	input, err := dto.DecodeSecurityAnalysis(r, a.securityMaxBodyBytes)
+	if err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	result, err := a.security.Analyze(r.Context(), input)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to analyze tfvars")
+		return
+	}
+
+	a.writeAudit(r.Context(), domain.AuditEvent{
+		Actor:        actorOrUnknown(r.Context()),
+		Action:       "security.analyze",
+		ResourceType: "security_findings",
+		Metadata: map[string]any{
+			"status":              http.StatusOK,
+			"findings_count":      len(result.Findings),
+			"rule_bundle_version": result.RuleBundleVersion,
+		},
+		CreatedAt: time.Now().UTC(),
+	})
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) SecurityFindings(w http.ResponseWriter, r *http.Request) {
+	filter, err := dto.ParseSecurityFindingFilter(r)
+	if err != nil {
+		writeValidationError(w, err)
+		return
+	}
+
+	findings, err := a.security.ListFindings(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load security findings")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"page":      filter.Pagination.Page,
+		"page_size": filter.Pagination.PageSize,
+		"order":     filter.Order,
+		"items":     findings,
+	})
+}
+
 func parseTimeRange(r *http.Request, required bool) (time.Time, time.Time, error) {
 	fromRaw := r.URL.Query().Get("from")
 	toRaw := r.URL.Query().Get("to")
@@ -359,4 +489,48 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeValidationError(w http.ResponseWriter, err error) {
+	var validationErr dto.ValidationError
+	if errors.As(err, &validationErr) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":    "validation failed",
+			"messages": validationErr.Messages,
+		})
+		return
+	}
+	writeError(w, http.StatusBadRequest, err.Error())
+}
+
+func writeIngestResponse(w http.ResponseWriter, result domain.IngestResult, err error) {
+	switch {
+	case err == nil && result.Outcome == domain.IngestOutcomeAccepted:
+		writeJSON(w, http.StatusCreated, result)
+	case err == nil && result.Outcome == domain.IngestOutcomeDuplicate:
+		writeJSON(w, http.StatusOK, result)
+	case err == nil && result.Outcome == domain.IngestOutcomeRetryScheduled:
+		writeJSON(w, http.StatusAccepted, result)
+	case err == nil && result.Outcome == domain.IngestOutcomeDeadLetter:
+		writeJSON(w, http.StatusConflict, result)
+	default:
+		writeError(w, http.StatusInternalServerError, "failed to persist ingest event")
+	}
+}
+
+func (a *API) writeAudit(ctx context.Context, event domain.AuditEvent) {
+	if a.audit == nil {
+		return
+	}
+	if err := a.audit.InsertAuditEvent(ctx, event); err != nil && a.logger != nil {
+		a.logger.Warn("failed to persist audit event", "error", err, "action", event.Action)
+	}
+}
+
+func actorOrUnknown(ctx context.Context) string {
+	actor := middleware.ActorFromContext(ctx)
+	if actor == "" {
+		return "unknown"
+	}
+	return actor
 }

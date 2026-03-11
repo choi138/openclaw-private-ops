@@ -49,3 +49,43 @@ func TestLoadFromEnvRejectsInvalidTimeoutEnv(t *testing.T) {
 		t.Fatal("expected invalid read timeout to fail")
 	}
 }
+
+func TestLoadFromEnvDefaultsIngestTokenToAdminToken(t *testing.T) {
+	t.Setenv("OPS_API_ADMIN_TOKEN", "admin-token")
+	t.Setenv("OPS_API_INGEST_TOKEN", "")
+	t.Setenv("OPS_API_ALLOW_MEMORY_FALLBACK", "true")
+	t.Setenv("OPS_API_DB_DSN", "")
+
+	cfg, err := LoadFromEnv()
+	if err != nil {
+		t.Fatalf("expected config to load, got error: %v", err)
+	}
+	if cfg.IngestToken != "admin-token" {
+		t.Fatalf("expected ingest token to default to admin token, got %q", cfg.IngestToken)
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidIngestRetryConfig(t *testing.T) {
+	t.Setenv("OPS_API_ADMIN_TOKEN", "admin-token")
+	t.Setenv("OPS_API_ALLOW_MEMORY_FALLBACK", "true")
+	t.Setenv("OPS_API_DB_DSN", "")
+	t.Setenv("OPS_API_INGEST_RETRY_BASE_DELAY_MS", "5000")
+	t.Setenv("OPS_API_INGEST_RETRY_MAX_DELAY_MS", "1000")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected invalid ingest retry config to fail")
+	}
+}
+
+func TestLoadFromEnvRejectsInvalidSecurityBodyLimit(t *testing.T) {
+	t.Setenv("OPS_API_ADMIN_TOKEN", "admin-token")
+	t.Setenv("OPS_API_ALLOW_MEMORY_FALLBACK", "true")
+	t.Setenv("OPS_API_DB_DSN", "")
+	t.Setenv("OPS_API_SECURITY_MAX_BODY_BYTES", "0")
+
+	_, err := LoadFromEnv()
+	if err == nil {
+		t.Fatal("expected invalid security max body bytes to fail")
+	}
+}

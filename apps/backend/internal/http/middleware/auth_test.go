@@ -11,7 +11,7 @@ import (
 func TestWithBearerAuthRejectsInvalidToken(t *testing.T) {
 	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}), "expected-token")
+	}), "expected-token", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "Bearer invalid")
@@ -31,7 +31,7 @@ func TestWithBearerAuthPassesValidToken(t *testing.T) {
 			t.Fatalf("expected actor admin in context, got %q", actor)
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}), "expected-token")
+	}), "expected-token", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "Bearer expected-token")
@@ -47,7 +47,7 @@ func TestWithBearerAuthPassesValidToken(t *testing.T) {
 func TestWithBearerAuthRejectsMissingAuthorizationHeader(t *testing.T) {
 	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), "expected-token")
+	}), "expected-token", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	rr := httptest.NewRecorder()
@@ -62,7 +62,7 @@ func TestWithBearerAuthRejectsMissingAuthorizationHeader(t *testing.T) {
 func TestWithBearerAuthRejectsTokenWithoutBearerPrefix(t *testing.T) {
 	h := middleware.WithBearerAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}), "expected-token")
+	}), "expected-token", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "expected-token")
@@ -82,7 +82,7 @@ func TestWithBearerAuthIgnoresActorHeader(t *testing.T) {
 			t.Fatalf("expected actor admin in context, got %q", actor)
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}), "expected-token")
+	}), "expected-token", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "Bearer expected-token")
@@ -102,7 +102,7 @@ func TestWithBearerAuthRejectsWhenTokenEmpty(t *testing.T) {
 			t.Fatalf("expected empty actor, got %q", actor)
 		}
 		w.WriteHeader(http.StatusNoContent)
-	}), "")
+	}), "", "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/dashboard/summary", nil)
 	req.Header.Set("Authorization", "Bearer expected-token")

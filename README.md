@@ -84,7 +84,9 @@ environments should set `OPS_API_DB_DSN` and keep memory fallback disabled.
 - `apps/backend/internal/repository`: memory and Postgres repository implementations
 - `apps/backend/api/openapi.yaml`: Ops API contract
 - `apps/backend/README.md`: backend-specific runtime and command details
-- `openspec/specs/ops-api-core/spec.md`: synced main spec for the current backend scope
+- `openspec/specs/ops-api-core/spec.md`: synced core backend read-model spec
+- `openspec/specs/ops-api-ingestion/spec.md`: synced ingest pipeline spec
+- `openspec/specs/ops-api-security-analysis/spec.md`: synced tfvars security analysis spec
 
 ## Development And CI
 - Install repo hooks:
@@ -125,6 +127,8 @@ pre-commit run --all-files
 ## Backend Summary
 - Runtime: Go `1.26.0`
 - Protected routes require `OPS_API_ADMIN_TOKEN`
+- Internal ingest writes use `OPS_API_INGEST_TOKEN` and support conversation, infra snapshot, and request-attempt ingestion
+- Admin-only tfvars security analysis is available through `POST /v1/security/analyze-tfvars` and `GET /v1/security/findings`
 - Database-backed mode uses `OPS_API_DB_DSN`
 - Read APIs include dashboard, conversations, messages, attempts, and infra snapshots
 - Authenticated reads are audited
