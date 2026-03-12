@@ -28,6 +28,7 @@ type Store struct {
 	conversationByExternal       map[string]int64
 	messageByExternal            map[string]int64
 	attemptByExternal            map[string]int64
+	snapshotByEvent              map[string]int64
 	ingestEvents                 map[string]domain.IngestEventRecord
 	securityFindingByFingerprint map[string]int64
 }
@@ -91,6 +92,7 @@ func NewStore() *Store {
 		conversationByExternal:       make(map[string]int64),
 		messageByExternal:            make(map[string]int64),
 		attemptByExternal:            make(map[string]int64),
+		snapshotByEvent:              make(map[string]int64),
 		ingestEvents:                 make(map[string]domain.IngestEventRecord),
 		securityFindingByFingerprint: make(map[string]int64),
 	}

@@ -106,8 +106,14 @@ func (s *Store) PersistInfraSnapshot(ctx context.Context, snapshot domain.InfraS
 	}
 
 	const insertSnapshot = `
-INSERT INTO infra_snapshots (source, vpn_peer_count, openclaw_up, cpu_pct, mem_pct, captured_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO infra_snapshots (source, event_id, vpn_peer_count, openclaw_up, cpu_pct, mem_pct, captured_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (source, event_id) WHERE event_id IS NOT NULL DO UPDATE
+SET vpn_peer_count = EXCLUDED.vpn_peer_count,
+    openclaw_up = EXCLUDED.openclaw_up,
+    cpu_pct = EXCLUDED.cpu_pct,
+    mem_pct = EXCLUDED.mem_pct,
+    captured_at = EXCLUDED.captured_at
 RETURNING id
 `
 
@@ -116,6 +122,7 @@ RETURNING id
 		ctx,
 		insertSnapshot,
 		snapshot.Source,
+		snapshot.EventID,
 		snapshot.VPNPeerCount,
 		snapshot.OpenClawUp,
 		snapshot.CPUPct,

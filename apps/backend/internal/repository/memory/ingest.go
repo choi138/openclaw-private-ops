@@ -46,6 +46,21 @@ func (s *Store) PersistInfraSnapshot(_ context.Context, snapshot domain.InfraSna
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	key := ingestKey(snapshot.Source, snapshot.EventID)
+	if id, ok := s.snapshotByEvent[key]; ok {
+		for i := range s.snapshots {
+			if s.snapshots[i].ID != id {
+				continue
+			}
+			s.snapshots[i].VPNPeerCount = snapshot.VPNPeerCount
+			s.snapshots[i].OpenClawUp = snapshot.OpenClawUp
+			s.snapshots[i].CPUPct = snapshot.CPUPct
+			s.snapshots[i].MemPct = snapshot.MemPct
+			s.snapshots[i].CapturedAt = snapshot.CapturedAt
+			return nil
+		}
+	}
+
 	item := domain.InfraSnapshot{
 		ID:           s.nextSnapshotID,
 		VPNPeerCount: snapshot.VPNPeerCount,
@@ -56,6 +71,7 @@ func (s *Store) PersistInfraSnapshot(_ context.Context, snapshot domain.InfraSna
 	}
 	s.nextSnapshotID++
 	s.snapshots = append(s.snapshots, item)
+	s.snapshotByEvent[key] = item.ID
 	return nil
 }
 

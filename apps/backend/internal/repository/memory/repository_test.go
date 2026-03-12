@@ -71,3 +71,44 @@ func TestEncodedKeysAvoidSeparatorCollisions(t *testing.T) {
 		t.Fatalf("expected ingest event keys to remain distinct, got %q", first)
 	}
 }
+
+func TestPersistInfraSnapshotReusesEventIdentity(t *testing.T) {
+	store := NewStore()
+	snapshot := domain.InfraSnapshotInput{
+		SchemaVersion: 1,
+		Source:        "wireguard",
+		EventID:       "evt-1",
+		CapturedAt:    time.Date(2026, 3, 11, 8, 0, 0, 0, time.UTC),
+		VPNPeerCount:  3,
+		OpenClawUp:    true,
+		CPUPct:        12.5,
+		MemPct:        31.2,
+	}
+
+	if err := store.PersistInfraSnapshot(context.Background(), snapshot); err != nil {
+		t.Fatalf("expected first snapshot persist to succeed, got %v", err)
+	}
+
+	snapshot.CPUPct = 18.0
+	if err := store.PersistInfraSnapshot(context.Background(), snapshot); err != nil {
+		t.Fatalf("expected repeated snapshot persist to succeed, got %v", err)
+	}
+
+	snapshots, err := store.ListSnapshots(context.Background(), time.Time{}, time.Now().UTC().Add(time.Hour), domain.Pagination{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("expected snapshot list to load, got %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Fatalf("expected one seed snapshot plus one event-backed snapshot, got %d", len(snapshots))
+	}
+	found := false
+	for _, item := range snapshots {
+		if item.CapturedAt.Equal(snapshot.CapturedAt) && item.CPUPct == 18.0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected repeated persist to update existing snapshot, got %+v", snapshots)
+	}
+}

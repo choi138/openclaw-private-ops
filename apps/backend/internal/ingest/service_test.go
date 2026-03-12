@@ -174,6 +174,61 @@ func TestProcessDueRetriesReclaimsStaleProcessingEvents(t *testing.T) {
 	}
 }
 
+func TestProcessDueRetriesDoesNotDuplicateRecoveredInfraSnapshots(t *testing.T) {
+	store := memory.NewStore()
+	service := NewService(store, Config{
+		ProcessingLeaseTimeout: time.Second,
+	})
+
+	now := time.Date(2026, 3, 11, 10, 30, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+
+	snapshot := testInfraSnapshot("evt-stale-infra")
+	if err := store.PersistInfraSnapshot(t.Context(), snapshot); err != nil {
+		t.Fatalf("expected initial snapshot persist to succeed, got %v", err)
+	}
+
+	before, err := store.ListSnapshots(t.Context(), time.Time{}, now.Add(time.Hour), domain.Pagination{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("expected snapshot list to load, got %v", err)
+	}
+
+	record := domain.IngestEventRecord{
+		EventKey: domain.EventKey{
+			EventType: EventTypeInfraSnapshot,
+			Source:    snapshot.Source,
+			EventID:   snapshot.EventID,
+		},
+		SchemaVersion: snapshot.SchemaVersion,
+		Status:        domain.IngestEventStatusProcessing,
+		Payload:       marshalJSON(t, snapshot),
+		AttemptCount:  1,
+		FirstSeenAt:   now.Add(-5 * time.Minute),
+		LastAttemptAt: now.Add(-2 * time.Second),
+	}
+	if _, inserted, err := store.ClaimEvent(t.Context(), record); err != nil {
+		t.Fatalf("expected stale infra snapshot event to be claimed, got %v", err)
+	} else if !inserted {
+		t.Fatal("expected stale infra snapshot event to be inserted")
+	}
+
+	result, err := service.ProcessDueRetries(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("expected stale infra snapshot reclaim to succeed, got %v", err)
+	}
+	if result.Completed != 1 {
+		t.Fatalf("expected reclaimed infra snapshot to complete, got %+v", result)
+	}
+
+	after, err := store.ListSnapshots(t.Context(), time.Time{}, now.Add(time.Hour), domain.Pagination{Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("expected snapshot list to load after reclaim, got %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("expected reclaimed infra snapshot retry to reuse existing row, got before=%d after=%d", len(before), len(after))
+	}
+}
+
 func TestTransientFailureSchedulesRetryAndEventuallyCompletes(t *testing.T) {
 	repo := &flakyConversationRepo{
 		Store:        memory.NewStore(),
@@ -470,6 +525,20 @@ func testRequestAttemptEvent(eventID string) domain.RequestAttemptEventInput {
 			Success:    true,
 			CreatedAt:  attemptAt,
 		},
+	}
+}
+
+func testInfraSnapshot(eventID string) domain.InfraSnapshotInput {
+	capturedAt := time.Date(2026, 3, 11, 8, 0, 0, 0, time.UTC)
+	return domain.InfraSnapshotInput{
+		SchemaVersion: domain.SupportedIngestSchemaVersion,
+		Source:        "wireguard",
+		EventID:       eventID,
+		CapturedAt:    capturedAt,
+		VPNPeerCount:  3,
+		OpenClawUp:    true,
+		CPUPct:        12.5,
+		MemPct:        31.2,
 	}
 }
 
