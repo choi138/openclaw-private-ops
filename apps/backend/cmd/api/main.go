@@ -15,8 +15,11 @@ import (
 
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/config"
 	httpapi "github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/http"
+	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/ingest"
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/repository/memory"
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/repository/postgres"
+	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/security"
+	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/worker"
 )
 
 func main() {
@@ -28,12 +31,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	deps, cleanup, err := buildDependencies(cfg)
+	deps, ingestService, cleanup, err := buildDependencies(cfg)
 	if err != nil {
 		logger.Error("failed to initialize repositories", "error", err)
 		os.Exit(1)
 	}
 	defer cleanup()
+
+	runtimeCtx, runtimeCancel := context.WithCancel(context.Background())
+	defer runtimeCancel()
+	go worker.NewRetryWorker(
+		ingestService,
+		logger,
+		cfg.IngestRetryWorkerInterval,
+		cfg.IngestRetryBatchSize,
+	).Run(runtimeCtx)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -73,21 +85,29 @@ func main() {
 	logger.Info("server stopped")
 }
 
-func buildDependencies(cfg config.Config) (httpapi.Dependencies, func(), error) {
+func buildDependencies(cfg config.Config) (httpapi.Dependencies, *ingest.Service, func(), error) {
 	if cfg.DatabaseDSN == "" {
 		store := memory.NewStore()
+		ingestService := ingest.NewService(store, ingest.Config{
+			RetryBaseDelay:   cfg.IngestRetryBaseDelay,
+			RetryMaxDelay:    cfg.IngestRetryMaxDelay,
+			RetryMaxAttempts: cfg.IngestRetryMaxAttempts,
+		})
+		securityService := security.NewService(store)
 		return httpapi.Dependencies{
 			Readiness:    store,
 			Dashboard:    store,
 			Conversation: store,
 			Infra:        store,
+			Security:     securityService,
+			Ingest:       ingestService,
 			Audit:        store,
-		}, func() {}, nil
+		}, ingestService, func() {}, nil
 	}
 
 	db, err := sql.Open(cfg.DatabaseDriver, cfg.DatabaseDSN)
 	if err != nil {
-		return httpapi.Dependencies{}, nil, err
+		return httpapi.Dependencies{}, nil, nil, err
 	}
 
 	db.SetMaxOpenConns(10)
@@ -95,6 +115,12 @@ func buildDependencies(cfg config.Config) (httpapi.Dependencies, func(), error) 
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	store := postgres.NewStore(db)
+	ingestService := ingest.NewService(store, ingest.Config{
+		RetryBaseDelay:   cfg.IngestRetryBaseDelay,
+		RetryMaxDelay:    cfg.IngestRetryMaxDelay,
+		RetryMaxAttempts: cfg.IngestRetryMaxAttempts,
+	})
+	securityService := security.NewService(store)
 	cleanup := func() {
 		_ = db.Close()
 	}
@@ -104,6 +130,8 @@ func buildDependencies(cfg config.Config) (httpapi.Dependencies, func(), error) 
 		Dashboard:    store,
 		Conversation: store,
 		Infra:        store,
+		Security:     securityService,
+		Ingest:       ingestService,
 		Audit:        store,
-	}, cleanup, nil
+	}, ingestService, cleanup, nil
 }

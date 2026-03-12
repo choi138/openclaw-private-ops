@@ -1,6 +1,8 @@
 package postgres
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -70,6 +72,21 @@ func TestGetTimeseriesRejectsUnsupportedBucket(t *testing.T) {
 	_, err := store.GetTimeseries(t.Context(), "requests", "invalid", tZero(), tZero())
 	if !errors.Is(err, repository.ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestIsTransientDBErrorTreatsContextCanceledAsNonTransient(t *testing.T) {
+	if isTransientDBError(context.Canceled) {
+		t.Fatal("expected context cancellation to remain non-transient")
+	}
+}
+
+func TestIsTransientDBErrorTreatsConnectionLossAsTransient(t *testing.T) {
+	if !isTransientDBError(sql.ErrConnDone) {
+		t.Fatal("expected sql.ErrConnDone to be transient")
+	}
+	if !isTransientDBError(context.DeadlineExceeded) {
+		t.Fatal("expected context deadline exceeded to be transient")
 	}
 }
 

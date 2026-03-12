@@ -38,3 +38,46 @@ The system MUST output the OpenClaw VM internal IP and gateway URL for VPN users
 #### Scenario: Terraform outputs
 - **WHEN** Terraform apply completes
 - **THEN** outputs include `openclaw_internal_ip` and `openclaw_gateway_url`
+
+### Requirement: Secret Manager references for sensitive bootstrap inputs
+The system MUST support Secret Manager reference inputs for sensitive values used by wg-easy and OpenClaw bootstrap (admin credentials, gateway password, and optional API/bot tokens).
+
+#### Scenario: Secret references are provided
+- **WHEN** a user supplies supported Secret Manager reference variables instead of plaintext variables
+- **THEN** Terraform plans/applies using only references and not raw secret payload values
+
+### Requirement: Runtime secret resolution through instance identity
+The system MUST resolve Secret Manager-backed values at VM startup using the VM service account identity before starting wg-easy or OpenClaw services.
+
+#### Scenario: Required secret can be resolved
+- **WHEN** startup script fetches a required secret successfully from Secret Manager
+- **THEN** the target service starts using the retrieved value without logging it or persisting it in plaintext to stdout, stderr, or serial console output, and any required runtime environment file is permission-restricted to the service owner only
+
+#### Scenario: Required secret cannot be resolved
+- **WHEN** the required secret reference is invalid or access is denied
+- **THEN** startup exits with a non-zero status and logs an actionable error without exposing secret payload values, while allowing the failing configured secret reference identifier to appear for operator diagnosis
+
+### Requirement: Least-privilege secret access
+The system MUST grant secret access permissions only to the specific secrets required by each VM.
+
+#### Scenario: VM reads an authorized secret
+- **WHEN** a VM service account requests a configured secret that it is explicitly bound to
+- **THEN** Secret Manager access is granted
+
+#### Scenario: VM reads an unauthorized secret
+- **WHEN** a VM service account requests a secret outside its configured bindings
+- **THEN** Secret Manager access is denied
+
+### Requirement: Secret Manager references are the supported source for sensitive bootstrap inputs
+The system MUST use Secret Manager reference variables for supported sensitive bootstrap inputs and does not need plaintext fallback variables in this module contract.
+
+#### Scenario: Secret reference configuration is used
+- **WHEN** users provide the supported Secret Manager reference variables for sensitive bootstrap inputs
+- **THEN** the module provisions successfully without requiring separate plaintext credential variables
+
+### Requirement: Mutually exclusive secret reference alternatives
+The system MUST enforce mutually exclusive source rules for credentials that have multiple Secret Manager-backed variants.
+
+#### Scenario: Both secret-backed alternatives are set for one credential
+- **WHEN** two mutually exclusive Secret Manager-backed variants are configured for the same credential
+- **THEN** Terraform validation fails with a clear error message

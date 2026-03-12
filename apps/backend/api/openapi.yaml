@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: OpenClaw Ops API
-  version: 0.1.0
-  description: Internal-only API for dashboard, conversation timeline, infra status, and audit-aware reads.
+  version: 0.2.0
+  description: Internal-only API for dashboard, conversation timeline, infra status, ingest pipelines, tfvars security analysis, and audit-aware reads.
 servers:
   - url: https://ops-api.internal
 security:
@@ -13,6 +13,266 @@ components:
       type: http
       scheme: bearer
       bearerFormat: opaque
+    IngestBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  schemas:
+    AccountIngest:
+      type: object
+      required: [external_id, email, status]
+      properties:
+        external_id:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+    ConversationIngest:
+      type: object
+      required: [external_id, channel, status, started_at]
+      properties:
+        external_id:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+    MessageIngest:
+      type: object
+      required: [external_id, role, content_masked, created_at]
+      properties:
+        external_id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system, tool]
+        content_masked:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ConversationEventIngestRequest:
+      type: object
+      required: [schema_version, source, event_id, occurred_at, account, conversation]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        source:
+          type: string
+        event_id:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        account:
+          $ref: "#/components/schemas/AccountIngest"
+        conversation:
+          $ref: "#/components/schemas/ConversationIngest"
+        message:
+          $ref: "#/components/schemas/MessageIngest"
+    InfraSnapshotIngestRequest:
+      type: object
+      required: [schema_version, source, event_id, captured_at, vpn_peer_count, openclaw_up, cpu_pct, mem_pct]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        source:
+          type: string
+        event_id:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        vpn_peer_count:
+          type: integer
+          minimum: 0
+        openclaw_up:
+          type: boolean
+        cpu_pct:
+          type: number
+          minimum: 0
+          maximum: 100
+        mem_pct:
+          type: number
+          minimum: 0
+          maximum: 100
+    RequestAttemptDetails:
+      type: object
+      required: [external_id, provider, model, tokens_in, tokens_out, cost_usd, latency_ms, success, created_at]
+      properties:
+        external_id:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        tokens_in:
+          type: integer
+          minimum: 0
+        tokens_out:
+          type: integer
+          minimum: 0
+        cost_usd:
+          type: number
+          minimum: 0
+        latency_ms:
+          type: integer
+          minimum: 0
+        success:
+          type: boolean
+        error_code:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    RequestAttemptIngestRequest:
+      type: object
+      required: [schema_version, source, event_id, occurred_at, account, conversation, attempt]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        source:
+          type: string
+        event_id:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        account:
+          $ref: "#/components/schemas/AccountIngest"
+        conversation:
+          $ref: "#/components/schemas/ConversationIngest"
+        attempt:
+          $ref: "#/components/schemas/RequestAttemptDetails"
+    IngestResult:
+      type: object
+      properties:
+        event_type:
+          type: string
+        source:
+          type: string
+        event_id:
+          type: string
+        outcome:
+          type: string
+          enum: [accepted, duplicate, retry_scheduled, dead_letter]
+        duplicate:
+          type: boolean
+        queued:
+          type: boolean
+        attempt_count:
+          type: integer
+    IngestStatus:
+      type: object
+      properties:
+        queue_depth:
+          type: integer
+        retry_scheduled:
+          type: integer
+        processing:
+          type: integer
+        dead_letter:
+          type: integer
+        oldest_pending_age_seconds:
+          type: number
+        oldest_retry_age_seconds:
+          type: number
+    SecurityAnalysisRequest:
+      type: object
+      required: [schema_version, tfvars]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        tfvars:
+          type: object
+          additionalProperties: true
+    SecurityFinding:
+      type: object
+      required:
+        [id, fingerprint, rule_id, rule_version, severity, status, title, description, first_detected_at, last_detected_at, updated_at]
+      properties:
+        id:
+          type: integer
+        fingerprint:
+          type: string
+        rule_id:
+          type: string
+        rule_version:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, info]
+        status:
+          type: string
+          enum: [open, acknowledged, resolved]
+        title:
+          type: string
+        description:
+          type: string
+        field_path:
+          type: string
+        fix_hint:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        first_detected_at:
+          type: string
+          format: date-time
+        last_detected_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    SecurityAnalysisResponse:
+      type: object
+      required: [schema_version, rule_bundle_id, rule_bundle_version, findings]
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        rule_bundle_id:
+          type: string
+        rule_bundle_version:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFinding"
+    SecurityFindingListResponse:
+      type: object
+      required: [page, page_size, order, items]
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        order:
+          type: string
+          enum: [asc, desc]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFinding"
 paths:
   /v1/healthz:
     get:
@@ -193,3 +453,197 @@ paths:
       responses:
         "200":
           description: Snapshot list
+  /v1/ingest/status:
+    get:
+      summary: Ingest queue and dead-letter status
+      responses:
+        "200":
+          description: Ingest health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestStatus"
+  /v1/security/analyze-tfvars:
+    post:
+      summary: Analyze tfvars payload for security findings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SecurityAnalysisRequest"
+      responses:
+        "200":
+          description: Structured security findings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityAnalysisResponse"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+  /v1/security/findings:
+    get:
+      summary: Query persisted security findings
+      parameters:
+        - in: query
+          name: status
+          description: Comma-separated lifecycle states.
+          schema:
+            type: string
+            example: open,resolved
+        - in: query
+          name: severity
+          description: Comma-separated severities.
+          schema:
+            type: string
+            example: critical,high
+        - in: query
+          name: order
+          description: Sort by last detected timestamp.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Filtered security findings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityFindingListResponse"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+  /v1/ingest/conversation-events:
+    post:
+      summary: Ingest conversation state and message events
+      security:
+        - IngestBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationEventIngestRequest"
+      responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "201":
+          description: Event persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "202":
+          description: Event queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Event was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+  /v1/ingest/infra-snapshot:
+    post:
+      summary: Ingest infra status snapshot
+      security:
+        - IngestBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InfraSnapshotIngestRequest"
+      responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "201":
+          description: Snapshot persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "202":
+          description: Snapshot queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Snapshot was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+  /v1/ingest/request-attempt:
+    post:
+      summary: Ingest provider/model request attempt metrics
+      security:
+        - IngestBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestAttemptIngestRequest"
+      responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "201":
+          description: Request attempt persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "202":
+          description: Request attempt queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Request attempt was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
