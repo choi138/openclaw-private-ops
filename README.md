@@ -127,7 +127,7 @@ pre-commit run --all-files
 ## Backend Summary
 - Runtime: Go `1.26.0`
 - Protected routes require `OPS_API_ADMIN_TOKEN`
-- Internal ingest writes use `OPS_API_INGEST_TOKEN` and support conversation, infra snapshot, and request-attempt ingestion
+- Internal ingest writes use a distinct `OPS_API_INGEST_TOKEN` and support conversation, infra snapshot, and request-attempt ingestion
 - Admin-only tfvars security analysis is available through `POST /v1/security/analyze-tfvars` and `GET /v1/security/findings`
 - Database-backed mode uses `OPS_API_DB_DSN`
 - Read APIs include dashboard, conversations, messages, attempts, and infra snapshots

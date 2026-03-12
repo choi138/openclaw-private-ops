@@ -46,6 +46,9 @@ func (w *RetryWorker) Run(ctx context.Context) {
 		case <-ticker.C:
 			result, err := w.service.ProcessDueRetries(ctx, w.limit)
 			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				if w.logger != nil {
 					w.logger.Warn("retry worker failed", "error", err)
 				}

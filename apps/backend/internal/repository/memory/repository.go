@@ -11,24 +11,24 @@ import (
 )
 
 type Store struct {
-	mu                     sync.RWMutex
-	accounts               []accountRecord
-	conversations          []domain.Conversation
-	messages               []domain.Message
-	attempts               []domain.RequestAttempt
-	snapshots              []domain.InfraSnapshot
-	audits                 []domain.AuditEvent
-	securityFindings       []domain.SecurityFinding
-	nextAccountID          int64
-	nextConversationID     int64
-	nextMessageID          int64
-	nextAttemptID          int64
-	nextSnapshotID         int64
-	nextSecurityFindingID  int64
-	conversationByExternal map[string]int64
-	messageByExternal      map[string]int64
-	attemptByExternal      map[string]int64
-	ingestEvents           map[string]domain.IngestEventRecord
+	mu                           sync.RWMutex
+	accounts                     []accountRecord
+	conversations                []domain.Conversation
+	messages                     []domain.Message
+	attempts                     []domain.RequestAttempt
+	snapshots                    []domain.InfraSnapshot
+	audits                       []domain.AuditEvent
+	securityFindings             []domain.SecurityFinding
+	nextAccountID                int64
+	nextConversationID           int64
+	nextMessageID                int64
+	nextAttemptID                int64
+	nextSnapshotID               int64
+	nextSecurityFindingID        int64
+	conversationByExternal       map[string]int64
+	messageByExternal            map[string]int64
+	attemptByExternal            map[string]int64
+	ingestEvents                 map[string]domain.IngestEventRecord
 	securityFindingByFingerprint map[string]int64
 }
 
@@ -75,23 +75,23 @@ func NewStore() *Store {
 	}
 
 	return &Store{
-		accounts:               []accountRecord{{ID: 1001, ExternalID: "seed-account", Email: "seed@example.com", Status: "active"}},
-		conversations:          []domain.Conversation{conv},
-		messages:               []domain.Message{msg},
-		attempts:               []domain.RequestAttempt{attempt},
-		snapshots:              []domain.InfraSnapshot{snapshot},
-		audits:                 make([]domain.AuditEvent, 0),
-		securityFindings:       make([]domain.SecurityFinding, 0),
-		nextAccountID:          1002,
-		nextConversationID:     2,
-		nextMessageID:          2,
-		nextAttemptID:          2,
-		nextSnapshotID:         2,
-		nextSecurityFindingID:  1,
-		conversationByExternal: make(map[string]int64),
-		messageByExternal:      make(map[string]int64),
-		attemptByExternal:      make(map[string]int64),
-		ingestEvents:           make(map[string]domain.IngestEventRecord),
+		accounts:                     []accountRecord{{ID: 1001, ExternalID: "seed-account", Email: "seed@example.com", Status: "active"}},
+		conversations:                []domain.Conversation{conv},
+		messages:                     []domain.Message{msg},
+		attempts:                     []domain.RequestAttempt{attempt},
+		snapshots:                    []domain.InfraSnapshot{snapshot},
+		audits:                       make([]domain.AuditEvent, 0),
+		securityFindings:             make([]domain.SecurityFinding, 0),
+		nextAccountID:                1002,
+		nextConversationID:           2,
+		nextMessageID:                2,
+		nextAttemptID:                2,
+		nextSnapshotID:               2,
+		nextSecurityFindingID:        1,
+		conversationByExternal:       make(map[string]int64),
+		messageByExternal:            make(map[string]int64),
+		attemptByExternal:            make(map[string]int64),
+		ingestEvents:                 make(map[string]domain.IngestEventRecord),
 		securityFindingByFingerprint: make(map[string]int64),
 	}
 }
@@ -292,8 +292,8 @@ func (s *Store) ListSnapshots(_ context.Context, from, to time.Time, pagination 
 	return paginate(filtered, pagination), nil
 }
 
-func (s *Store) InsertReadAudit(_ context.Context, event domain.AuditEvent) error {
-	return s.InsertAuditEvent(context.Background(), event)
+func (s *Store) InsertReadAudit(ctx context.Context, event domain.AuditEvent) error {
+	return s.InsertAuditEvent(ctx, event)
 }
 
 func (s *Store) InsertAuditEvent(_ context.Context, event domain.AuditEvent) error {

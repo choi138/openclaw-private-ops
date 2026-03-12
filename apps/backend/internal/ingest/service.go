@@ -297,9 +297,6 @@ func (s *Service) backoffForAttempt(attemptCount int) time.Duration {
 			return s.config.RetryMaxDelay
 		}
 	}
-	if delay > s.config.RetryMaxDelay {
-		return s.config.RetryMaxDelay
-	}
 	return delay
 }
 

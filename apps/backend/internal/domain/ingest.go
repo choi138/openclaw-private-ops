@@ -19,11 +19,13 @@ const (
 	IngestOutcomeDeadLetter     IngestOutcome = "dead_letter"
 )
 
+type IngestEventStatus string
+
 const (
-	IngestEventStatusProcessing     = "processing"
-	IngestEventStatusRetryScheduled = "retry_scheduled"
-	IngestEventStatusCompleted      = "completed"
-	IngestEventStatusDeadLetter     = "dead_letter"
+	IngestEventStatusProcessing     IngestEventStatus = "processing"
+	IngestEventStatusRetryScheduled IngestEventStatus = "retry_scheduled"
+	IngestEventStatusCompleted      IngestEventStatus = "completed"
+	IngestEventStatusDeadLetter     IngestEventStatus = "dead_letter"
 )
 
 type IngestResult struct {
@@ -110,12 +112,12 @@ type RequestAttemptEventInput struct {
 
 type IngestEventRecord struct {
 	EventKey
-	SchemaVersion int       `json:"schema_version"`
-	Status        string    `json:"status"`
-	Payload       []byte    `json:"-"`
-	LastError     string    `json:"last_error,omitempty"`
-	AttemptCount  int       `json:"attempt_count"`
-	FirstSeenAt   time.Time `json:"first_seen_at"`
-	LastAttemptAt time.Time `json:"last_attempt_at"`
-	NextRetryAt   time.Time `json:"next_retry_at"`
+	SchemaVersion int               `json:"schema_version"`
+	Status        IngestEventStatus `json:"status"`
+	Payload       []byte            `json:"-"`
+	LastError     string            `json:"last_error,omitempty"`
+	AttemptCount  int               `json:"attempt_count"`
+	FirstSeenAt   time.Time         `json:"first_seen_at"`
+	LastAttemptAt time.Time         `json:"last_attempt_at"`
+	NextRetryAt   time.Time         `json:"next_retry_at"`
 }

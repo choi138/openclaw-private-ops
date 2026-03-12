@@ -35,6 +35,7 @@ type Match struct {
 	Title       string
 	Description string
 	FieldPath   string
+	MatchKey    string
 	FixHint     string
 	Metadata    map[string]any
 }
@@ -127,16 +128,23 @@ func severityRank(severity domain.SecuritySeverity) int {
 
 func computeFingerprint(match Match) string {
 	payload := map[string]any{
-		"rule_id":      match.RuleID,
-		"rule_version": match.RuleVersion,
-		"field_path":   match.FieldPath,
-		"title":        match.Title,
-		"description":  match.Description,
-		"metadata":     cloneMetadata(match.Metadata),
+		"rule_id":    match.RuleID,
+		"field_path": match.FieldPath,
+		"match_key":  stableMatchKey(match),
 	}
 	encoded, _ := json.Marshal(payload)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
+}
+
+func stableMatchKey(match Match) string {
+	if trimmed := strings.TrimSpace(match.MatchKey); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(match.FieldPath); trimmed != "" {
+		return trimmed
+	}
+	return strings.TrimSpace(match.RuleID)
 }
 
 func cloneMetadata(in map[string]any) map[string]any {

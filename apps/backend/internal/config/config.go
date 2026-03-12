@@ -91,7 +91,10 @@ func LoadFromEnv() (Config, error) {
 		return Config{}, fmt.Errorf("OPS_API_ADMIN_TOKEN is required")
 	}
 	if cfg.IngestToken == "" {
-		cfg.IngestToken = cfg.AdminToken
+		return Config{}, fmt.Errorf("OPS_API_INGEST_TOKEN is required")
+	}
+	if cfg.IngestToken == cfg.AdminToken {
+		return Config{}, fmt.Errorf("OPS_API_INGEST_TOKEN must differ from OPS_API_ADMIN_TOKEN")
 	}
 	if cfg.DatabaseDSN == "" && !cfg.AllowMemoryFallback {
 		return Config{}, fmt.Errorf("OPS_API_DB_DSN is required unless OPS_API_ALLOW_MEMORY_FALLBACK=true")

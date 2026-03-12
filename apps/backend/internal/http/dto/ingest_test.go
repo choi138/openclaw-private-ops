@@ -86,3 +86,72 @@ func TestDecodeInfraSnapshotReturnsDomainPayload(t *testing.T) {
 		t.Fatalf("unexpected payload identity: %+v", payload)
 	}
 }
+
+func TestDecodeInfraSnapshotRequiresScalarFields(t *testing.T) {
+	body := `{
+		"schema_version": 1,
+		"source": "wireguard",
+		"event_id": "evt-4",
+		"captured_at": "2026-03-11T08:00:05Z"
+	}`
+	req := httptest.NewRequest("POST", "/v1/ingest/infra-snapshot", strings.NewReader(body))
+
+	_, err := DecodeInfraSnapshot(req, 2048)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if !containsMessage(validationErr.Messages, "vpn_peer_count is required") {
+		t.Fatalf("expected missing vpn_peer_count message, got %+v", validationErr.Messages)
+	}
+	if !containsMessage(validationErr.Messages, "openclaw_up is required") {
+		t.Fatalf("expected missing openclaw_up message, got %+v", validationErr.Messages)
+	}
+}
+
+func TestDecodeRequestAttemptRequiresScalarFields(t *testing.T) {
+	body := `{
+		"schema_version": 1,
+		"source": "openclaw",
+		"event_id": "evt-5",
+		"occurred_at": "2026-03-11T08:00:05Z",
+		"account": {"external_id":"acct-1","email":"ops@example.com","status":"active"},
+		"conversation": {"external_id":"conv-1","channel":"telegram","status":"completed","started_at":"2026-03-11T08:00:00Z"},
+		"attempt": {
+			"external_id":"attempt-1",
+			"provider":"anthropic",
+			"model":"claude",
+			"created_at":"2026-03-11T08:00:05Z"
+		}
+	}`
+	req := httptest.NewRequest("POST", "/v1/ingest/request-attempt", strings.NewReader(body))
+
+	_, err := DecodeRequestAttemptEvent(req, 2048)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	validationErr, ok := err.(ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if !containsMessage(validationErr.Messages, "attempt.tokens_in is required") {
+		t.Fatalf("expected missing tokens_in message, got %+v", validationErr.Messages)
+	}
+	if !containsMessage(validationErr.Messages, "attempt.success is required") {
+		t.Fatalf("expected missing success message, got %+v", validationErr.Messages)
+	}
+}
+
+func containsMessage(messages []string, want string) bool {
+	for _, message := range messages {
+		if message == want {
+			return true
+		}
+	}
+	return false
+}

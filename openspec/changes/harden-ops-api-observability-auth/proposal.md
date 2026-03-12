@@ -6,7 +6,7 @@ As the Ops API matures, operating it safely requires stronger observability, rol
 
 - Add observability foundations: Prometheus metrics endpoint, OpenTelemetry tracing hooks, and standardized structured logs.
 - Introduce OIDC-based authentication and role-based authorization (`admin`, `viewer`, `auditor`).
-- Define controlled break-glass token behavior for emergency access paths.
+- Define controlled break-glass token behavior for emergency access paths, including short TTLs, explicit allowed roles and paths, immediate revocation, and mandatory issuance/use audit trails.
 - Implement automated retention jobs for raw message payloads and aged aggregate records.
 - Establish alert signal contracts for error rate, ingest lag, and service availability.
 

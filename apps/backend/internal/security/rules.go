@@ -37,6 +37,7 @@ func (r openClawPublicIPRule) Evaluate(tfvars map[string]any) []Match {
 		Title:       "OpenClaw public IP is enabled",
 		Description: "OpenClaw is configured with a public IP, which weakens the VPN-only security boundary.",
 		FieldPath:   "openclaw_enable_public_ip",
+		MatchKey:    "public-ip-enabled",
 		FixHint:     "Set openclaw_enable_public_ip to false and reach OpenClaw only through the WireGuard VPN.",
 		Metadata: map[string]any{
 			"value": true,
@@ -78,6 +79,7 @@ func (r osLoginDisabledRule) Evaluate(tfvars map[string]any) []Match {
 		Title:       "Project OS Login is disabled",
 		Description: "SSH access is not backed by project-level OS Login, which makes centralized access control and auditability weaker.",
 		FieldPath:   "enable_project_oslogin",
+		MatchKey:    "oslogin-disabled",
 		FixHint:     "Enable project-level OS Login unless there is a documented exception.",
 		Metadata: map[string]any{
 			"value": false,
@@ -100,6 +102,7 @@ func (r wgEasyPlaintextSecretRule) Evaluate(tfvars map[string]any) []Match {
 		Title:       "wg-easy uses a plaintext password secret",
 		Description: "A plaintext password secret is configured for wg-easy. Storing a password hash secret reduces blast radius if the runtime value is exposed.",
 		FieldPath:   "wgeasy_password_secret",
+		MatchKey:    "plaintext-secret-used",
 		FixHint:     "Prefer wgeasy_password_hash_secret over wgeasy_password_secret when possible.",
 		Metadata: map[string]any{
 			"value_redacted": "[REDACTED]",
@@ -137,6 +140,7 @@ func (r unpinnedSecretReferenceRule) Evaluate(tfvars map[string]any) []Match {
 			Title:       fmt.Sprintf("Secret reference is not pinned for %s", field),
 			Description: "The Secret Manager reference does not pin to a specific version, which can introduce silent configuration drift.",
 			FieldPath:   field,
+			MatchKey:    field,
 			FixHint:     "Use a Secret Manager reference with an explicit /versions/<number> suffix.",
 			Metadata: map[string]any{
 				"reference_redacted": redactSecretRef(value),
@@ -151,25 +155,29 @@ type defaultManagementPortRule struct{}
 func (defaultManagementPortRule) ID() string      { return "default-management-port-retained" }
 func (defaultManagementPortRule) Version() string { return "1.0.0" }
 func (r defaultManagementPortRule) Evaluate(tfvars map[string]any) []Match {
-	defaults := map[string]float64{
-		"wg_port":                51820,
-		"wgeasy_ui_port":         51821,
-		"openclaw_gateway_port":  18789,
+	defaults := []struct {
+		field    string
+		expected float64
+	}{
+		{field: "openclaw_gateway_port", expected: 18789},
+		{field: "wg_port", expected: 51820},
+		{field: "wgeasy_ui_port", expected: 51821},
 	}
 
 	findings := make([]Match, 0)
-	for field, expected := range defaults {
-		actual, ok := numberValue(tfvars, field)
-		if !ok || actual != expected {
+	for _, item := range defaults {
+		actual, ok := numberValue(tfvars, item.field)
+		if !ok || actual != item.expected {
 			continue
 		}
 		findings = append(findings, Match{
 			RuleID:      r.ID(),
 			RuleVersion: r.Version(),
 			Severity:    domain.SecuritySeverityInfo,
-			Title:       fmt.Sprintf("Default management port retained for %s", field),
+			Title:       fmt.Sprintf("Default management port retained for %s", item.field),
 			Description: "A default management or service port is retained. Defaults are easier to fingerprint during scanning and are worth reviewing for your environment.",
-			FieldPath:   field,
+			FieldPath:   item.field,
+			MatchKey:    item.field,
 			FixHint:     "Review whether keeping the default port is intentional for this deployment.",
 			Metadata: map[string]any{
 				"port": int(actual),
@@ -197,6 +205,7 @@ func exposedCIDRFinding(ruleID, ruleVersion, field string, severity domain.Secur
 			Title:       title,
 			Description: fmt.Sprintf("%s includes %s, allowing unrestricted inbound access.", field, cidr),
 			FieldPath:   field,
+			MatchKey:    cidr,
 			FixHint:     hint,
 			Metadata: map[string]any{
 				"cidr": cidr,

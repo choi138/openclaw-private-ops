@@ -171,6 +171,20 @@ func TestIngestRouteRequiresIngestToken(t *testing.T) {
 	}
 }
 
+func TestIngestRouteRejectsAdminToken(t *testing.T) {
+	store := memory.NewStore()
+	h := httpapi.NewRouter(config.Config{AdminToken: "admin-token", IngestToken: "ingest-token"}, testDependencies(store), testLogger())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ingest/conversation-events", strings.NewReader(validConversationEventJSON()))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+}
+
 func TestIngestConversationRouteHandlesDuplicates(t *testing.T) {
 	store := memory.NewStore()
 	h := httpapi.NewRouter(config.Config{
@@ -223,6 +237,24 @@ func TestSecurityAnalyzeRouteRequiresAdminToken(t *testing.T) {
 	}, testDependencies(store), testLogger())
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/security/analyze-tfvars", strings.NewReader(validSecurityAnalysisJSON()))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
+	}
+}
+
+func TestSecurityAnalyzeRouteRejectsIngestToken(t *testing.T) {
+	store := memory.NewStore()
+	h := httpapi.NewRouter(config.Config{
+		AdminToken:           "admin-token",
+		IngestToken:          "ingest-token",
+		SecurityMaxBodyBytes: 1 << 20,
+	}, testDependencies(store), testLogger())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/security/analyze-tfvars", strings.NewReader(validSecurityAnalysisJSON()))
+	req.Header.Set("Authorization", "Bearer ingest-token")
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 

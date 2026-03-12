@@ -8,7 +8,7 @@
 
 - [ ] 2.1 Add Prometheus-compatible `/metrics` endpoint for request, latency, error, and ingest lag metrics
 - [ ] 2.2 Add OpenTelemetry tracing middleware with configurable exporter and sampling defaults
-- [ ] 2.3 Standardize structured log fields (`request_id`, `user_id`, `path`, `latency_ms`, `status`, `error_code`)
+- [ ] 2.3 Standardize structured log fields (`request_id`, `principal_id`, `path`, `latency_ms`, `status`, `error_code`) and keep end-user identifiers optional to avoid over-logging PII
 
 ## 3. Retention Automation
 

@@ -80,6 +80,8 @@ type API struct {
 
 var dateOnlyPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+const detachedAuditTimeout = 2 * time.Second
+
 func New(deps Dependencies, logger *slog.Logger) *API {
 	if deps.Readiness == nil {
 		panic("handler.New requires Readiness")
@@ -363,7 +365,7 @@ func (a *API) AnalyzeSecurityTfvars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.writeAudit(r.Context(), domain.AuditEvent{
+	a.writeDetachedAudit(r.Context(), domain.AuditEvent{
 		Actor:        actorOrUnknown(r.Context()),
 		Action:       "security.analyze",
 		ResourceType: "security_findings",
@@ -525,6 +527,15 @@ func (a *API) writeAudit(ctx context.Context, event domain.AuditEvent) {
 	if err := a.audit.InsertAuditEvent(ctx, event); err != nil && a.logger != nil {
 		a.logger.Warn("failed to persist audit event", "error", err, "action", event.Action)
 	}
+}
+
+func (a *API) writeDetachedAudit(ctx context.Context, event domain.AuditEvent) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedAuditTimeout)
+	defer cancel()
+	a.writeAudit(auditCtx, event)
 }
 
 func actorOrUnknown(ctx context.Context) string {

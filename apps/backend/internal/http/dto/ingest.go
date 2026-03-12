@@ -36,10 +36,10 @@ type infraSnapshotRequest struct {
 	Source        string    `json:"source"`
 	EventID       string    `json:"event_id"`
 	CapturedAt    time.Time `json:"captured_at"`
-	VPNPeerCount  int       `json:"vpn_peer_count"`
-	OpenClawUp    bool      `json:"openclaw_up"`
-	CPUPct        float64   `json:"cpu_pct"`
-	MemPct        float64   `json:"mem_pct"`
+	VPNPeerCount  *int      `json:"vpn_peer_count"`
+	OpenClawUp    *bool     `json:"openclaw_up"`
+	CPUPct        *float64  `json:"cpu_pct"`
+	MemPct        *float64  `json:"mem_pct"`
 }
 
 type requestAttemptEventRequest struct {
@@ -77,11 +77,11 @@ type requestAttemptRequest struct {
 	ExternalID string    `json:"external_id"`
 	Provider   string    `json:"provider"`
 	Model      string    `json:"model"`
-	TokensIn   int64     `json:"tokens_in"`
-	TokensOut  int64     `json:"tokens_out"`
-	CostUSD    float64   `json:"cost_usd"`
-	LatencyMS  int64     `json:"latency_ms"`
-	Success    bool      `json:"success"`
+	TokensIn   *int64    `json:"tokens_in"`
+	TokensOut  *int64    `json:"tokens_out"`
+	CostUSD    *float64  `json:"cost_usd"`
+	LatencyMS  *int64    `json:"latency_ms"`
+	Success    *bool     `json:"success"`
 	ErrorCode  *string   `json:"error_code,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 }
@@ -146,15 +146,7 @@ func DecodeInfraSnapshot(r *http.Request, maxBytes int64) (domain.InfraSnapshotI
 	}
 
 	messages := validateEnvelope(payload.SchemaVersion, payload.Source, payload.EventID, payload.CapturedAt)
-	if payload.VPNPeerCount < 0 {
-		messages = append(messages, "vpn_peer_count must be greater than or equal to 0")
-	}
-	if payload.CPUPct < 0 || payload.CPUPct > 100 {
-		messages = append(messages, "cpu_pct must be between 0 and 100")
-	}
-	if payload.MemPct < 0 || payload.MemPct > 100 {
-		messages = append(messages, "mem_pct must be between 0 and 100")
-	}
+	messages = append(messages, validateInfraSnapshot(payload)...)
 	if len(messages) > 0 {
 		return domain.InfraSnapshotInput{}, ValidationError{Messages: messages}
 	}
@@ -164,10 +156,10 @@ func DecodeInfraSnapshot(r *http.Request, maxBytes int64) (domain.InfraSnapshotI
 		Source:        strings.TrimSpace(payload.Source),
 		EventID:       strings.TrimSpace(payload.EventID),
 		CapturedAt:    payload.CapturedAt.UTC(),
-		VPNPeerCount:  payload.VPNPeerCount,
-		OpenClawUp:    payload.OpenClawUp,
-		CPUPct:        payload.CPUPct,
-		MemPct:        payload.MemPct,
+		VPNPeerCount:  *payload.VPNPeerCount,
+		OpenClawUp:    *payload.OpenClawUp,
+		CPUPct:        *payload.CPUPct,
+		MemPct:        *payload.MemPct,
 	}, nil
 }
 
@@ -218,11 +210,11 @@ func DecodeRequestAttemptEvent(r *http.Request, maxBytes int64) (domain.RequestA
 			ExternalID: strings.TrimSpace(payload.Attempt.ExternalID),
 			Provider:   strings.TrimSpace(payload.Attempt.Provider),
 			Model:      strings.TrimSpace(payload.Attempt.Model),
-			TokensIn:   payload.Attempt.TokensIn,
-			TokensOut:  payload.Attempt.TokensOut,
-			CostUSD:    payload.Attempt.CostUSD,
-			LatencyMS:  payload.Attempt.LatencyMS,
-			Success:    payload.Attempt.Success,
+			TokensIn:   *payload.Attempt.TokensIn,
+			TokensOut:  *payload.Attempt.TokensOut,
+			CostUSD:    *payload.Attempt.CostUSD,
+			LatencyMS:  *payload.Attempt.LatencyMS,
+			Success:    *payload.Attempt.Success,
 			ErrorCode:  errorCode,
 			CreatedAt:  payload.Attempt.CreatedAt.UTC(),
 		},
@@ -342,6 +334,29 @@ func validateMessage(message conversationMessageRequest) []string {
 	return messages
 }
 
+func validateInfraSnapshot(snapshot infraSnapshotRequest) []string {
+	var messages []string
+	if snapshot.VPNPeerCount == nil {
+		messages = append(messages, "vpn_peer_count is required")
+	} else if *snapshot.VPNPeerCount < 0 {
+		messages = append(messages, "vpn_peer_count must be greater than or equal to 0")
+	}
+	if snapshot.OpenClawUp == nil {
+		messages = append(messages, "openclaw_up is required")
+	}
+	if snapshot.CPUPct == nil {
+		messages = append(messages, "cpu_pct is required")
+	} else if *snapshot.CPUPct < 0 || *snapshot.CPUPct > 100 {
+		messages = append(messages, "cpu_pct must be between 0 and 100")
+	}
+	if snapshot.MemPct == nil {
+		messages = append(messages, "mem_pct is required")
+	} else if *snapshot.MemPct < 0 || *snapshot.MemPct > 100 {
+		messages = append(messages, "mem_pct must be between 0 and 100")
+	}
+	return messages
+}
+
 func validateAttempt(attempt requestAttemptRequest) []string {
 	var messages []string
 	if strings.TrimSpace(attempt.ExternalID) == "" {
@@ -353,17 +368,28 @@ func validateAttempt(attempt requestAttemptRequest) []string {
 	if strings.TrimSpace(attempt.Model) == "" {
 		messages = append(messages, "attempt.model is required")
 	}
-	if attempt.TokensIn < 0 {
+	if attempt.TokensIn == nil {
+		messages = append(messages, "attempt.tokens_in is required")
+	} else if *attempt.TokensIn < 0 {
 		messages = append(messages, "attempt.tokens_in must be greater than or equal to 0")
 	}
-	if attempt.TokensOut < 0 {
+	if attempt.TokensOut == nil {
+		messages = append(messages, "attempt.tokens_out is required")
+	} else if *attempt.TokensOut < 0 {
 		messages = append(messages, "attempt.tokens_out must be greater than or equal to 0")
 	}
-	if attempt.CostUSD < 0 {
+	if attempt.CostUSD == nil {
+		messages = append(messages, "attempt.cost_usd is required")
+	} else if *attempt.CostUSD < 0 {
 		messages = append(messages, "attempt.cost_usd must be greater than or equal to 0")
 	}
-	if attempt.LatencyMS < 0 {
+	if attempt.LatencyMS == nil {
+		messages = append(messages, "attempt.latency_ms is required")
+	} else if *attempt.LatencyMS < 0 {
 		messages = append(messages, "attempt.latency_ms must be greater than or equal to 0")
+	}
+	if attempt.Success == nil {
+		messages = append(messages, "attempt.success is required")
 	}
 	if attempt.CreatedAt.IsZero() {
 		messages = append(messages, "attempt.created_at is required and must be RFC3339")

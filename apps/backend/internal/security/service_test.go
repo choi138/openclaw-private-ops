@@ -99,6 +99,33 @@ func TestListFindingsFiltersBySeverityAndStatus(t *testing.T) {
 	}
 }
 
+func TestComputeFingerprintIgnoresMutablePresentationFields(t *testing.T) {
+	base := Match{
+		RuleID:      "ssh-exposed-to-world",
+		RuleVersion: "1.0.0",
+		FieldPath:   "ssh_source_ranges",
+		MatchKey:    "0.0.0.0/0",
+		Title:       "SSH exposed",
+		Description: "first description",
+		Metadata: map[string]any{
+			"cidr": "0.0.0.0/0",
+		},
+	}
+
+	mutated := base
+	mutated.RuleVersion = "2.0.0"
+	mutated.Title = "SSH is exposed to the world"
+	mutated.Description = "second description"
+	mutated.Metadata = map[string]any{
+		"cidr":   "0.0.0.0/0",
+		"notice": "changed copy",
+	}
+
+	if got, want := computeFingerprint(mutated), computeFingerprint(base); got != want {
+		t.Fatalf("expected fingerprint to remain stable, got %q want %q", got, want)
+	}
+}
+
 func insecureTfvarsFixture() map[string]any {
 	return map[string]any{
 		"openclaw_enable_public_ip":      true,

@@ -20,7 +20,7 @@ func (s *Store) ClaimEvent(_ context.Context, event domain.IngestEventRecord) (d
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	key := ingestKey(event.Source, event.EventID)
+	key := ingestEventKey(event.EventType, event.Source, event.EventID)
 	if existing, ok := s.ingestEvents[key]; ok {
 		return existing, false, nil
 	}
@@ -72,14 +72,14 @@ func (s *Store) MarkEventCompleted(_ context.Context, key domain.EventKey, _ tim
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	event, ok := s.ingestEvents[ingestKey(key.Source, key.EventID)]
+	event, ok := s.ingestEvents[ingestEventKey(key.EventType, key.Source, key.EventID)]
 	if !ok {
 		return nil
 	}
 	event.Status = domain.IngestEventStatusCompleted
 	event.LastError = ""
 	event.NextRetryAt = time.Time{}
-	s.ingestEvents[ingestKey(key.Source, key.EventID)] = event
+	s.ingestEvents[ingestEventKey(key.EventType, key.Source, key.EventID)] = event
 	return nil
 }
 
@@ -87,8 +87,8 @@ func (s *Store) RecordEventFailure(_ context.Context, key domain.EventKey, lastE
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ingestKey := ingestKey(key.Source, key.EventID)
-	event, ok := s.ingestEvents[ingestKey]
+	eventKey := ingestEventKey(key.EventType, key.Source, key.EventID)
+	event, ok := s.ingestEvents[eventKey]
 	if !ok {
 		return domain.IngestResult{}, nil
 	}
@@ -102,7 +102,7 @@ func (s *Store) RecordEventFailure(_ context.Context, key domain.EventKey, lastE
 		event.Status = domain.IngestEventStatusDeadLetter
 		event.LastError = lastError
 		event.NextRetryAt = time.Time{}
-		s.ingestEvents[ingestKey] = event
+		s.ingestEvents[eventKey] = event
 		result.Outcome = domain.IngestOutcomeDeadLetter
 		return result, nil
 	}
@@ -110,7 +110,7 @@ func (s *Store) RecordEventFailure(_ context.Context, key domain.EventKey, lastE
 	event.Status = domain.IngestEventStatusRetryScheduled
 	event.LastError = lastError
 	event.NextRetryAt = nextRetryAt.UTC()
-	s.ingestEvents[ingestKey] = event
+	s.ingestEvents[eventKey] = event
 	result.Outcome = domain.IngestOutcomeRetryScheduled
 	result.Queued = true
 	return result, nil
@@ -147,7 +147,7 @@ func (s *Store) LeaseRetryBatch(_ context.Context, now time.Time, limit int) ([]
 		item.Status = domain.IngestEventStatusProcessing
 		item.AttemptCount++
 		item.LastAttemptAt = now.UTC()
-		s.ingestEvents[ingestKey(item.Source, item.EventID)] = item
+		s.ingestEvents[ingestEventKey(item.EventType, item.Source, item.EventID)] = item
 		items[i] = item
 	}
 
@@ -173,7 +173,7 @@ func (s *Store) GetIngestStatus(_ context.Context, now time.Time) (domain.Ingest
 			if age := now.Sub(event.FirstSeenAt).Seconds(); age > status.OldestPendingAgeSeconds {
 				status.OldestPendingAgeSeconds = age
 			}
-			if age := now.Sub(event.NextRetryAt).Seconds(); age > status.OldestRetryAgeSeconds {
+			if age := now.Sub(event.NextRetryAt).Seconds(); age > 0 && age > status.OldestRetryAgeSeconds {
 				status.OldestRetryAgeSeconds = age
 			}
 		case domain.IngestEventStatusDeadLetter:
@@ -304,4 +304,8 @@ func (s *Store) upsertAttempt(source string, conversationID int64, attempt domai
 
 func ingestKey(source, externalID string) string {
 	return source + ":" + externalID
+}
+
+func ingestEventKey(eventType, source, eventID string) string {
+	return eventType + ":" + source + ":" + eventID
 }

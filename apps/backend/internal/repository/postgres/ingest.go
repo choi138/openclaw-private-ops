@@ -19,9 +19,9 @@ INSERT INTO ingest_events (
   event_type, source, event_id, schema_version, status, payload_json, attempt_count, first_seen_at, last_attempt_at
 )
 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
-ON CONFLICT (source, event_id) DO NOTHING
+ON CONFLICT (event_type, source, event_id) DO NOTHING
 RETURNING event_type, source, event_id, schema_version, status, last_error, attempt_count, first_seen_at, last_attempt_at, next_retry_at
-`
+	`
 
 	var stored domain.IngestEventRecord
 	var nextRetryAt sql.NullTime
@@ -61,7 +61,7 @@ RETURNING event_type, source, event_id, schema_version, status, last_error, atte
 		}
 		return stored, true, nil
 	case errors.Is(err, sql.ErrNoRows):
-		existing, lookupErr := s.lookupIngestEvent(ctx, event.Source, event.EventID, false)
+		existing, lookupErr := s.lookupIngestEvent(ctx, event.EventType, event.Source, event.EventID, false)
 		return existing, false, lookupErr
 	default:
 		return domain.IngestEventRecord{}, false, wrapDBError(err)
@@ -218,45 +218,58 @@ SET status = $1,
     next_retry_at = NULL,
     last_error = NULL,
     dead_lettered_at = NULL
-WHERE source = $3 AND event_id = $4
-`
-	_, err := s.db.ExecContext(ctx, q, domain.IngestEventStatusCompleted, processedAt, key.Source, key.EventID)
+WHERE event_type = $3 AND source = $4 AND event_id = $5
+	`
+	_, err := s.db.ExecContext(ctx, q, domain.IngestEventStatusCompleted, processedAt, key.EventType, key.Source, key.EventID)
 	return wrapDBError(err)
 }
 
 func (s *Store) RecordEventFailure(ctx context.Context, key domain.EventKey, lastError string, nextRetryAt time.Time, maxAttempts int) (domain.IngestResult, error) {
-	const getAttempt = `
-SELECT attempt_count
-FROM ingest_events
-WHERE source = $1 AND event_id = $2
-`
+	const updateFailure = `
+UPDATE ingest_events
+SET status = CASE
+      WHEN $1::timestamptz IS NULL OR attempt_count >= $2 THEN $3
+      ELSE $4
+    END,
+    last_error = $5,
+    next_retry_at = CASE
+      WHEN $1::timestamptz IS NULL OR attempt_count >= $2 THEN NULL
+      ELSE $1
+    END,
+    dead_lettered_at = CASE
+      WHEN $1::timestamptz IS NULL OR attempt_count >= $2 THEN NOW()
+      ELSE NULL
+    END
+WHERE event_type = $6 AND source = $7 AND event_id = $8
+RETURNING attempt_count, status
+	`
 
-	var attemptCount int
-	if err := s.db.QueryRowContext(ctx, getAttempt, key.Source, key.EventID).Scan(&attemptCount); err != nil {
+	var (
+		scheduledRetryAt any
+		attemptCount     int
+		status           domain.IngestEventStatus
+	)
+	if !nextRetryAt.IsZero() {
+		scheduledRetryAt = nextRetryAt.UTC()
+	}
+	if err := s.db.QueryRowContext(
+		ctx,
+		updateFailure,
+		scheduledRetryAt,
+		maxAttempts,
+		domain.IngestEventStatusDeadLetter,
+		domain.IngestEventStatusRetryScheduled,
+		lastError,
+		key.EventType,
+		key.Source,
+		key.EventID,
+	).Scan(&attemptCount, &status); err != nil {
 		return domain.IngestResult{}, wrapDBError(err)
 	}
 
 	outcome := domain.IngestOutcomeRetryScheduled
-	status := domain.IngestEventStatusRetryScheduled
-	if nextRetryAt.IsZero() || attemptCount >= maxAttempts {
+	if status == domain.IngestEventStatusDeadLetter {
 		outcome = domain.IngestOutcomeDeadLetter
-		status = domain.IngestEventStatusDeadLetter
-	}
-
-	const updateFailure = `
-UPDATE ingest_events
-SET status = $1,
-    last_error = $2,
-    next_retry_at = $3,
-    dead_lettered_at = CASE WHEN $1 = $4 THEN NOW() ELSE NULL END
-WHERE source = $5 AND event_id = $6
-`
-	var nextRetry any
-	if !nextRetryAt.IsZero() && outcome == domain.IngestOutcomeRetryScheduled {
-		nextRetry = nextRetryAt
-	}
-	if _, err := s.db.ExecContext(ctx, updateFailure, status, lastError, nextRetry, domain.IngestEventStatusDeadLetter, key.Source, key.EventID); err != nil {
-		return domain.IngestResult{}, wrapDBError(err)
 	}
 
 	return domain.IngestResult{
@@ -279,7 +292,7 @@ func (s *Store) LeaseRetryBatch(ctx context.Context, now time.Time, limit int) (
 
 	const leaseQuery = `
 WITH due AS (
-  SELECT source, event_id
+  SELECT event_type, source, event_id
   FROM ingest_events
   WHERE status = $1
     AND next_retry_at IS NOT NULL
@@ -293,10 +306,11 @@ SET status = $4,
     attempt_count = ie.attempt_count + 1,
     last_attempt_at = $2
 FROM due
-WHERE ie.source = due.source
+WHERE ie.event_type = due.event_type
+  AND ie.source = due.source
   AND ie.event_id = due.event_id
 RETURNING ie.event_type, ie.source, ie.event_id, ie.schema_version, ie.status, ie.payload_json, ie.last_error, ie.attempt_count, ie.first_seen_at, ie.last_attempt_at, ie.next_retry_at
-`
+	`
 
 	rows, err := tx.QueryContext(ctx, leaseQuery,
 		domain.IngestEventStatusRetryScheduled,
@@ -427,27 +441,23 @@ SET conversation_id = EXCLUDED.conversation_id,
 	return err
 }
 
-func (s *Store) lookupIngestEvent(ctx context.Context, source, eventID string, includePayload bool) (domain.IngestEventRecord, error) {
-	query := `
-SELECT event_type, source, event_id, schema_version, status, attempt_count, first_seen_at, last_attempt_at, next_retry_at
-FROM ingest_events
-WHERE source = $1 AND event_id = $2
-`
+func (s *Store) lookupIngestEvent(ctx context.Context, eventType, source, eventID string, includePayload bool) (domain.IngestEventRecord, error) {
+	var query string
 	if includePayload {
 		query = `
 SELECT event_type, source, event_id, schema_version, status, payload_json, last_error, attempt_count, first_seen_at, last_attempt_at, next_retry_at
 FROM ingest_events
-WHERE source = $1 AND event_id = $2
-`
+WHERE event_type = $1 AND source = $2 AND event_id = $3
+	`
 	} else {
 		query = `
 SELECT event_type, source, event_id, schema_version, status, last_error, attempt_count, first_seen_at, last_attempt_at, next_retry_at
 FROM ingest_events
-WHERE source = $1 AND event_id = $2
-`
+WHERE event_type = $1 AND source = $2 AND event_id = $3
+	`
 	}
 
-	row := s.db.QueryRowContext(ctx, query, source, eventID)
+	row := s.db.QueryRowContext(ctx, query, eventType, source, eventID)
 	if includePayload {
 		event, err := scanIngestEvent(row, true)
 		return event, wrapDBError(err)
@@ -517,7 +527,7 @@ func wrapDBError(err error) error {
 }
 
 func isTransientDBError(err error) bool {
-	if errors.Is(err, sql.ErrConnDone) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+	if errors.Is(err, sql.ErrConnDone) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 

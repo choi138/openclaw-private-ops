@@ -47,12 +47,44 @@ func TestIngestConversationEventIsIdempotent(t *testing.T) {
 		t.Fatalf("expected at least one ingested conversation")
 	}
 
-	items, err := store.ListMessages(context.Background(), 2, domain.Pagination{Page: 1, PageSize: 100})
+	var ingestedConversationID int64
+	for _, conversation := range conversations {
+		if conversation.StartedAt.Equal(event.Conversation.StartedAt) {
+			ingestedConversationID = conversation.ID
+			break
+		}
+	}
+	if ingestedConversationID == 0 {
+		t.Fatal("expected to find ingested conversation id")
+	}
+
+	items, err := store.ListMessages(context.Background(), ingestedConversationID, domain.Pagination{Page: 1, PageSize: 100})
 	if err != nil {
 		t.Fatalf("expected list messages to succeed, got %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("expected one message for ingested conversation, got %d", len(items))
+	}
+}
+
+func TestDifferentIngestEventTypesCanReuseEventID(t *testing.T) {
+	store := memory.NewStore()
+	service := NewService(store, Config{})
+
+	conversationResult, err := service.IngestConversationEvent(t.Context(), testConversationEvent("evt-shared"))
+	if err != nil {
+		t.Fatalf("expected conversation ingest to succeed, got %v", err)
+	}
+	if conversationResult.Outcome != domain.IngestOutcomeAccepted {
+		t.Fatalf("expected accepted conversation ingest, got %s", conversationResult.Outcome)
+	}
+
+	attemptResult, err := service.IngestRequestAttempt(t.Context(), testRequestAttemptEvent("evt-shared"))
+	if err != nil {
+		t.Fatalf("expected request attempt ingest to succeed, got %v", err)
+	}
+	if attemptResult.Outcome != domain.IngestOutcomeAccepted {
+		t.Fatalf("expected accepted request attempt ingest, got %s", attemptResult.Outcome)
 	}
 }
 
@@ -199,6 +231,10 @@ func TestCompletionFailureSchedulesRetryWithoutReplayingPayload(t *testing.T) {
 }
 
 func TestIngestThroughputTarget100EventsPerSecond(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping throughput timing check in short mode")
+	}
+
 	store := memory.NewStore()
 	service := NewService(store, Config{})
 	started := time.Now()
@@ -277,6 +313,39 @@ func testConversationEvent(eventID string) domain.ConversationEventInput {
 			Role:          "user",
 			ContentMasked: "deploy wireguard",
 			CreatedAt:     messageAt,
+		},
+	}
+}
+
+func testRequestAttemptEvent(eventID string) domain.RequestAttemptEventInput {
+	startedAt := time.Date(2026, 3, 11, 8, 0, 0, 0, time.UTC)
+	attemptAt := startedAt.Add(8 * time.Second)
+	return domain.RequestAttemptEventInput{
+		SchemaVersion: domain.SupportedIngestSchemaVersion,
+		Source:        "openclaw",
+		EventID:       eventID,
+		OccurredAt:    attemptAt,
+		Account: domain.AccountInput{
+			ExternalID: "acct-100",
+			Email:      "ops@example.com",
+			Status:     "active",
+		},
+		Conversation: domain.ConversationInput{
+			ExternalID: "conv-100",
+			Channel:    "telegram",
+			Status:     "completed",
+			StartedAt:  startedAt,
+		},
+		Attempt: domain.RequestAttemptInput{
+			ExternalID: "attempt-100",
+			Provider:   "anthropic",
+			Model:      "claude-opus-4-6",
+			TokensIn:   120,
+			TokensOut:  240,
+			CostUSD:    0.02,
+			LatencyMS:  420,
+			Success:    true,
+			CreatedAt:  attemptAt,
 		},
 	}
 }

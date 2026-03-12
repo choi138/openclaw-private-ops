@@ -18,7 +18,7 @@ This directory contains the Go backend for internal Ops Console APIs.
 ## Environment variables
 - `OPS_API_ADDR` (default `:8080`)
 - `OPS_API_ADMIN_TOKEN` (required for protected routes)
-- `OPS_API_INGEST_TOKEN` (optional; defaults to `OPS_API_ADMIN_TOKEN`)
+- `OPS_API_INGEST_TOKEN` (required for ingest routes; must differ from `OPS_API_ADMIN_TOKEN`)
 - `OPS_API_ALLOW_MEMORY_FALLBACK` (optional; default `false`)
 - `OPS_API_DB_DSN` (required unless `OPS_API_ALLOW_MEMORY_FALLBACK=true`)
 - `OPS_API_DB_DRIVER` (default `postgres`)
@@ -65,12 +65,12 @@ make test
 ## Ingest producer contract
 
 Internal producers authenticate with `Authorization: Bearer <OPS_API_INGEST_TOKEN>`.
-If `OPS_API_INGEST_TOKEN` is unset, the API falls back to `OPS_API_ADMIN_TOKEN`.
+`OPS_API_INGEST_TOKEN` is required and must be distinct from `OPS_API_ADMIN_TOKEN` so producer credentials cannot call admin-only routes.
 
 All ingest payloads must include:
 - `schema_version`: currently `1`
 - `source`: stable producer identifier such as `openclaw` or `wireguard`
-- `event_id`: producer-unique idempotency key
+- `event_id`: producer-unique idempotency key within each `event_type`
 
 ### `POST /v1/ingest/conversation-events`
 - Upserts account and conversation state.
@@ -124,6 +124,7 @@ The API provides an internal admin-only tfvars analysis workflow:
 
 - `POST /v1/security/analyze-tfvars`: analyze a tfvars JSON payload, return normalized findings, and upsert persisted lifecycle records.
 - `GET /v1/security/findings`: read persisted findings with status/severity filtering, pagination, and ordering.
+- Both routes require `Authorization: Bearer <OPS_API_ADMIN_TOKEN>`. Missing or wrong tokens return `401 Unauthorized`.
 
 Example request:
 
