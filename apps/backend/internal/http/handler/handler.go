@@ -510,14 +510,14 @@ func writeIngestResponse(w http.ResponseWriter, result domain.IngestResult, err 
 	switch {
 	case errors.As(err, &validationErr), errors.Is(err, repository.ErrInvalidInput):
 		writeValidationError(w, err)
+	case result.Outcome == domain.IngestOutcomeDeadLetter:
+		writeJSON(w, http.StatusConflict, result)
 	case err == nil && result.Outcome == domain.IngestOutcomeAccepted:
 		writeJSON(w, http.StatusCreated, result)
 	case err == nil && result.Outcome == domain.IngestOutcomeDuplicate:
 		writeJSON(w, http.StatusOK, result)
 	case err == nil && result.Outcome == domain.IngestOutcomeRetryScheduled:
 		writeJSON(w, http.StatusAccepted, result)
-	case err == nil && result.Outcome == domain.IngestOutcomeDeadLetter:
-		writeJSON(w, http.StatusConflict, result)
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to persist ingest event")
 	}

@@ -539,6 +539,12 @@ paths:
             schema:
               $ref: "#/components/schemas/ConversationEventIngestRequest"
       responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "201":
           description: Event persisted
           content:
@@ -547,6 +553,16 @@ paths:
                 $ref: "#/components/schemas/IngestResult"
         "202":
           description: Event queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Event was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "400":
           description: Validation error
         "401":
@@ -563,6 +579,12 @@ paths:
             schema:
               $ref: "#/components/schemas/InfraSnapshotIngestRequest"
       responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "201":
           description: Snapshot persisted
           content:
@@ -571,6 +593,16 @@ paths:
                 $ref: "#/components/schemas/IngestResult"
         "202":
           description: Snapshot queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Snapshot was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "400":
           description: Validation error
         "401":
@@ -587,6 +619,12 @@ paths:
             schema:
               $ref: "#/components/schemas/RequestAttemptIngestRequest"
       responses:
+        "200":
+          description: Duplicate delivery recognized and ignored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "201":
           description: Request attempt persisted
           content:
@@ -595,6 +633,16 @@ paths:
                 $ref: "#/components/schemas/IngestResult"
         "202":
           description: Request attempt queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
+        "409":
+          description: Request attempt was dead-lettered and should not be retried automatically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResult"
         "400":
           description: Validation error
         "401":

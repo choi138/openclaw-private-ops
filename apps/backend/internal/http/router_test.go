@@ -382,6 +382,27 @@ func TestIngestRouteReturnsBadRequestForPermanentServiceError(t *testing.T) {
 	}
 }
 
+func TestIngestRouteReturnsConflictForDeadLetterOutcome(t *testing.T) {
+	store := memory.NewStore()
+	deps := testDependencies(store)
+	deps.Ingest = deadLetterIngestWriter{}
+
+	h := httpapi.NewRouter(config.Config{
+		AdminToken:         "admin-token",
+		IngestToken:        "ingest-token",
+		IngestMaxBodyBytes: 1 << 20,
+	}, deps, testLogger())
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/ingest/conversation-events", strings.NewReader(validConversationEventJSON()))
+	req.Header.Set("Authorization", "Bearer ingest-token")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusConflict, rr.Code, rr.Body.String())
+	}
+}
+
 func TestSecurityAnalyzeRouteDoesNotBlockOnDetachedAuditWrite(t *testing.T) {
 	store := memory.NewStore()
 	audit := newBlockingAuditWriter(store)
@@ -404,7 +425,11 @@ func TestSecurityAnalyzeRouteDoesNotBlockOnDetachedAuditWrite(t *testing.T) {
 		close(done)
 	}()
 
-	<-audit.started
+	select {
+	case <-audit.started:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected detached audit write to start")
+	}
 	select {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
@@ -480,6 +505,32 @@ func (invalidInputIngestWriter) IngestRequestAttempt(context.Context, domain.Req
 }
 
 func (invalidInputIngestWriter) GetStatus(context.Context) (domain.IngestStatus, error) {
+	return domain.IngestStatus{}, nil
+}
+
+type deadLetterIngestWriter struct{}
+
+func (deadLetterIngestWriter) IngestConversationEvent(context.Context, domain.ConversationEventInput) (domain.IngestResult, error) {
+	return domain.IngestResult{
+		EventKey: domain.EventKey{
+			EventType: ingest.EventTypeConversation,
+			Source:    "openclaw",
+			EventID:   "evt-router-dead-letter",
+		},
+		Outcome:      domain.IngestOutcomeDeadLetter,
+		AttemptCount: 3,
+	}, fmt.Errorf("terminal persistence failure")
+}
+
+func (deadLetterIngestWriter) IngestInfraSnapshot(context.Context, domain.InfraSnapshotInput) (domain.IngestResult, error) {
+	return domain.IngestResult{}, nil
+}
+
+func (deadLetterIngestWriter) IngestRequestAttempt(context.Context, domain.RequestAttemptEventInput) (domain.IngestResult, error) {
+	return domain.IngestResult{}, nil
+}
+
+func (deadLetterIngestWriter) GetStatus(context.Context) (domain.IngestStatus, error) {
 	return domain.IngestStatus{}, nil
 }
 
