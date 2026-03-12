@@ -80,6 +80,7 @@ func (r *Registry) ObserveRequest(method, route string, status int, duration tim
 	for i, bucket := range r.latencyBuckets {
 		if durationMS <= bucket {
 			h.Counts[i]++
+			break
 		}
 	}
 

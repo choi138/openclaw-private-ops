@@ -131,12 +131,20 @@ func (v *oidcValidator) lookupKey(ctx context.Context, kid string) (crypto.Publi
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
+	refreshed := false
 	if time.Since(v.loadedAt) > 5*time.Minute || len(v.keys) == 0 {
 		if err := v.refreshKeysLocked(ctx); err != nil {
 			return nil, err
 		}
+		refreshed = true
 	}
 	key, ok := v.keys[kid]
+	if !ok && !refreshed {
+		if err := v.refreshKeysLocked(ctx); err != nil {
+			return nil, err
+		}
+		key, ok = v.keys[kid]
+	}
 	if !ok {
 		return nil, fmt.Errorf("unknown kid %q", kid)
 	}
@@ -204,23 +212,47 @@ func decodeJWTPart(part string, out any) error {
 func verifyJWTSignature(alg string, key crypto.PublicKey, signingInput string, signature []byte) error {
 	switch alg {
 	case "RS256":
+		rsaKey, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *rsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha256.Sum256([]byte(signingInput))
-		return rsa.VerifyPKCS1v15(key.(*rsa.PublicKey), crypto.SHA256, hashed[:], signature)
+		return rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, hashed[:], signature)
 	case "RS384":
+		rsaKey, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *rsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha512.Sum384([]byte(signingInput))
-		return rsa.VerifyPKCS1v15(key.(*rsa.PublicKey), crypto.SHA384, hashed[:], signature)
+		return rsa.VerifyPKCS1v15(rsaKey, crypto.SHA384, hashed[:], signature)
 	case "RS512":
+		rsaKey, ok := key.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *rsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha512.Sum512([]byte(signingInput))
-		return rsa.VerifyPKCS1v15(key.(*rsa.PublicKey), crypto.SHA512, hashed[:], signature)
+		return rsa.VerifyPKCS1v15(rsaKey, crypto.SHA512, hashed[:], signature)
 	case "ES256":
+		ecKey, ok := key.(*ecdsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *ecdsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha256.Sum256([]byte(signingInput))
-		return verifyECDSA(key.(*ecdsa.PublicKey), hashed[:], signature)
+		return verifyECDSA(ecKey, hashed[:], signature)
 	case "ES384":
+		ecKey, ok := key.(*ecdsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *ecdsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha512.Sum384([]byte(signingInput))
-		return verifyECDSA(key.(*ecdsa.PublicKey), hashed[:], signature)
+		return verifyECDSA(ecKey, hashed[:], signature)
 	case "ES512":
+		ecKey, ok := key.(*ecdsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("key type mismatch: expected *ecdsa.PublicKey for alg %q", alg)
+		}
 		hashed := sha512.Sum512([]byte(signingInput))
-		return verifyECDSA(key.(*ecdsa.PublicKey), hashed[:], signature)
+		return verifyECDSA(ecKey, hashed[:], signature)
 	default:
 		return fmt.Errorf("unsupported JWT alg %q", alg)
 	}
