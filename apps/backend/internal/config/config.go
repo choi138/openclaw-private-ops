@@ -299,6 +299,9 @@ func LoadFromEnv() (Config, error) {
 		if cfg.BreakGlass.ExpiresAt.IsZero() {
 			return Config{}, fmt.Errorf("OPS_API_BREAK_GLASS_EXPIRES_AT is required when break-glass is enabled")
 		}
+		if !cfg.BreakGlass.ExpiresAt.After(time.Now().UTC()) {
+			return Config{}, fmt.Errorf("OPS_API_BREAK_GLASS_EXPIRES_AT must be in the future")
+		}
 		if len(cfg.BreakGlass.AllowedPaths) == 0 {
 			return Config{}, fmt.Errorf("OPS_API_BREAK_GLASS_ALLOWED_PATHS is required when break-glass is enabled")
 		}

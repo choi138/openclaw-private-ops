@@ -85,12 +85,16 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) (domain.RetentionR
 		if err != nil {
 			return report, err
 		}
+		affectedCount := affected
+		if s.cfg.DryRun {
+			affectedCount = 0
+		}
 		report.Targets = append(report.Targets, domain.RetentionTargetReport{
 			Target:         target.name,
 			Action:         target.action,
 			Cutoff:         target.cutoff.UTC(),
 			CandidateCount: affected,
-			AffectedCount:  affected,
+			AffectedCount:  affectedCount,
 		})
 	}
 

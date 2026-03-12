@@ -121,14 +121,29 @@ func defaultErrorCode(status int) string {
 	}
 }
 
+var knownRoutePrefixes = []string{
+	"/metrics",
+	"/v1/healthz",
+	"/v1/readyz",
+	"/v1/dashboard",
+	"/v1/conversations",
+	"/v1/infra",
+	"/v1/security",
+	"/v1/ingest",
+	"/v1/audit",
+	"/v1/retention",
+}
+
 func normalizeRoute(path string) string {
-	switch {
-	case path == "/metrics":
-		return "/metrics"
-	case path == "/v1/healthz":
-		return "/v1/healthz"
-	case path == "/v1/readyz":
-		return "/v1/readyz"
+	matched := false
+	for _, prefix := range knownRoutePrefixes {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return "/unknown"
 	}
 
 	parts := stringsSplit(path)

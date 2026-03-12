@@ -12,14 +12,17 @@ func (s *Store) CompactRawMessagePayloads(_ context.Context, cutoff time.Time, l
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	candidates := make([]int64, 0, limit)
+	candidates := make([]int64, 0, len(s.messages))
 	for _, message := range s.messages {
-		if len(candidates) >= limit {
-			break
-		}
 		if message.CreatedAt.Before(cutoff) && len(s.messageRawPayload[message.ID]) > 0 {
 			candidates = append(candidates, message.ID)
 		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i] < candidates[j]
+	})
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
 	}
 	if dryRun {
 		return len(candidates), nil
@@ -88,11 +91,8 @@ func (s *Store) DeleteExpiredIngestEvents(_ context.Context, cutoff time.Time, l
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	keys := make([]string, 0, limit)
+	keys := make([]string, 0, len(s.ingestEvents))
 	for key, event := range s.ingestEvents {
-		if len(keys) >= limit {
-			break
-		}
 		if event.Status != domain.IngestEventStatusCompleted && event.Status != domain.IngestEventStatusDeadLetter {
 			continue
 		}
@@ -101,6 +101,9 @@ func (s *Store) DeleteExpiredIngestEvents(_ context.Context, cutoff time.Time, l
 		}
 	}
 	sort.Strings(keys)
+	if len(keys) > limit {
+		keys = keys[:limit]
+	}
 	if dryRun {
 		return len(keys), nil
 	}

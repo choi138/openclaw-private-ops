@@ -172,7 +172,7 @@ func (v *oidcValidator) refreshKeysLocked(ctx context.Context) error {
 	for _, raw := range payload.Keys {
 		key, err := parseJWK(raw)
 		if err != nil {
-			return err
+			continue
 		}
 		keys[raw.Kid] = key
 	}
