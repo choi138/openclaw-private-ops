@@ -231,7 +231,9 @@ func (s *Store) upsertConversation(source string, accountID int64, conversation 
 			s.conversations[i].Channel = conversation.Channel
 			s.conversations[i].Status = conversation.Status
 			s.conversations[i].StartedAt = conversation.StartedAt
-			s.conversations[i].EndedAt = conversation.EndedAt
+			if conversation.EndedAt != nil {
+				s.conversations[i].EndedAt = conversation.EndedAt
+			}
 			return id
 		}
 	}

@@ -192,7 +192,9 @@ func DecodeRequestAttemptEvent(r *http.Request, maxBytes int64) (domain.RequestA
 	var errorCode *string
 	if payload.Attempt.ErrorCode != nil {
 		trimmed := strings.TrimSpace(*payload.Attempt.ErrorCode)
-		errorCode = &trimmed
+		if trimmed != "" {
+			errorCode = &trimmed
+		}
 	}
 
 	return domain.RequestAttemptEventInput{

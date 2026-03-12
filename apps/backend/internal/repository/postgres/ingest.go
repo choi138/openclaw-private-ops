@@ -414,7 +414,7 @@ SET account_id = EXCLUDED.account_id,
     channel = EXCLUDED.channel,
     status = EXCLUDED.status,
     started_at = EXCLUDED.started_at,
-    ended_at = EXCLUDED.ended_at
+    ended_at = COALESCE(EXCLUDED.ended_at, conversations.ended_at)
 RETURNING id
 `
 

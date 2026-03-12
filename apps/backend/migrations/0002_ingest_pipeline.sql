@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS ingest_events (
   next_retry_at TIMESTAMPTZ NULL,
   processed_at TIMESTAMPTZ NULL,
   dead_lettered_at TIMESTAMPTZ NULL,
-  PRIMARY KEY (source, event_id)
+  PRIMARY KEY (event_type, source, event_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ingest_events_status_retry

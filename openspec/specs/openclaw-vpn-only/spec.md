@@ -51,11 +51,11 @@ The system MUST resolve Secret Manager-backed values at VM startup using the VM 
 
 #### Scenario: Required secret can be resolved
 - **WHEN** startup script fetches a required secret successfully from Secret Manager
-- **THEN** the target service starts using the retrieved value without logging it or persisting it in plaintext to stdout, stderr, serial console output, or environment files
+- **THEN** the target service starts using the retrieved value without logging it or persisting it in plaintext to stdout, stderr, or serial console output, and any required runtime environment file is permission-restricted to the service owner only
 
 #### Scenario: Required secret cannot be resolved
 - **WHEN** the required secret reference is invalid or access is denied
-- **THEN** startup exits with a non-zero status and logs a sanitized actionable error without exposing secret values, names, full resource paths, or version identifiers
+- **THEN** startup exits with a non-zero status and logs an actionable error without exposing secret payload values, while allowing the failing configured secret reference identifier to appear for operator diagnosis
 
 ### Requirement: Least-privilege secret access
 The system MUST grant secret access permissions only to the specific secrets required by each VM.

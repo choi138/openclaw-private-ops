@@ -221,6 +221,38 @@ func TestDecodeRequestAttemptRejectsAttemptAfterConversationEnd(t *testing.T) {
 	}
 }
 
+func TestDecodeRequestAttemptNormalizesBlankErrorCodeToNil(t *testing.T) {
+	body := `{
+		"schema_version": 1,
+		"source": "openclaw",
+		"event_id": "evt-8",
+		"occurred_at": "2026-03-11T08:00:05Z",
+		"account": {"external_id":"acct-1","email":"ops@example.com","status":"active"},
+		"conversation": {"external_id":"conv-1","channel":"telegram","status":"completed","started_at":"2026-03-11T08:00:00Z"},
+		"attempt": {
+			"external_id":"attempt-1",
+			"provider":"anthropic",
+			"model":"claude",
+			"tokens_in":1,
+			"tokens_out":0,
+			"cost_usd":0,
+			"latency_ms":5,
+			"success":false,
+			"error_code":"   ",
+			"created_at":"2026-03-11T08:00:05Z"
+		}
+	}`
+	req := httptest.NewRequest("POST", "/v1/ingest/request-attempt", strings.NewReader(body))
+
+	event, err := DecodeRequestAttemptEvent(req, 2048)
+	if err != nil {
+		t.Fatalf("expected payload to decode, got %v", err)
+	}
+	if event.Attempt.ErrorCode != nil {
+		t.Fatalf("expected blank error_code to normalize to nil, got %q", *event.Attempt.ErrorCode)
+	}
+}
+
 func containsMessage(messages []string, want string) bool {
 	for _, message := range messages {
 		if message == want {
