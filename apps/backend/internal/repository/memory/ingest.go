@@ -229,9 +229,17 @@ func (s *Store) upsertConversation(source string, accountID int64, conversation 
 			}
 			s.conversations[i].AccountID = accountID
 			s.conversations[i].Channel = conversation.Channel
-			s.conversations[i].Status = conversation.Status
-			s.conversations[i].StartedAt = conversation.StartedAt
-			if conversation.EndedAt != nil {
+			if s.conversations[i].StartedAt.After(conversation.StartedAt) {
+				s.conversations[i].StartedAt = conversation.StartedAt
+			}
+			switch {
+			case s.conversations[i].EndedAt == nil:
+				s.conversations[i].Status = conversation.Status
+				s.conversations[i].EndedAt = conversation.EndedAt
+			case conversation.EndedAt == nil:
+				// Preserve the existing terminal state when a stale non-terminal update arrives.
+			case conversation.EndedAt.After(*s.conversations[i].EndedAt):
+				s.conversations[i].Status = conversation.Status
 				s.conversations[i].EndedAt = conversation.EndedAt
 			}
 			return id

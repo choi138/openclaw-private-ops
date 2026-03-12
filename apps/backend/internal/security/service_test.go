@@ -142,6 +142,15 @@ func TestUnpinnedSecretRuleIgnoresNonSecretManagerValues(t *testing.T) {
 	}
 }
 
+func TestUnpinnedSecretRuleFlagsNonNumericVersionAliases(t *testing.T) {
+	findings := unpinnedSecretReferenceRule{}.Evaluate(map[string]any{
+		"wgeasy_password_secret": "projects/demo/secrets/plain-openclaw-password/versions/prod",
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected non-numeric version alias to be flagged, got %+v", findings)
+	}
+}
+
 func insecureTfvarsFixture() map[string]any {
 	return map[string]any{
 		"openclaw_enable_public_ip":      true,

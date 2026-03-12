@@ -412,9 +412,16 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (source, external_id) DO UPDATE
 SET account_id = EXCLUDED.account_id,
     channel = EXCLUDED.channel,
-    status = EXCLUDED.status,
-    started_at = EXCLUDED.started_at,
-    ended_at = COALESCE(EXCLUDED.ended_at, conversations.ended_at)
+    status = CASE
+      WHEN conversations.ended_at IS NOT NULL AND (EXCLUDED.ended_at IS NULL OR EXCLUDED.ended_at < conversations.ended_at) THEN conversations.status
+      ELSE EXCLUDED.status
+    END,
+    started_at = LEAST(conversations.started_at, EXCLUDED.started_at),
+    ended_at = CASE
+      WHEN conversations.ended_at IS NULL THEN EXCLUDED.ended_at
+      WHEN EXCLUDED.ended_at IS NULL THEN conversations.ended_at
+      ELSE GREATEST(conversations.ended_at, EXCLUDED.ended_at)
+    END
 RETURNING id
 `
 

@@ -115,6 +115,7 @@ func TestPersistInfraSnapshotReusesEventIdentity(t *testing.T) {
 
 func TestPersistRequestAttemptDoesNotClearConversationEndTime(t *testing.T) {
 	store := NewStore()
+	startedAt := time.Date(2026, 3, 11, 8, 0, 0, 0, time.UTC)
 	endedAt := time.Date(2026, 3, 11, 8, 5, 0, 0, time.UTC)
 
 	if err := store.PersistConversationEvent(context.Background(), domain.ConversationEventInput{
@@ -131,7 +132,7 @@ func TestPersistRequestAttemptDoesNotClearConversationEndTime(t *testing.T) {
 			ExternalID: "conv-1",
 			Channel:    "telegram",
 			Status:     "completed",
-			StartedAt:  endedAt.Add(-5 * time.Minute),
+			StartedAt:  startedAt,
 			EndedAt:    &endedAt,
 		},
 	}); err != nil {
@@ -151,8 +152,8 @@ func TestPersistRequestAttemptDoesNotClearConversationEndTime(t *testing.T) {
 		Conversation: domain.ConversationInput{
 			ExternalID: "conv-1",
 			Channel:    "telegram",
-			Status:     "completed",
-			StartedAt:  endedAt.Add(-5 * time.Minute),
+			Status:     "in_progress",
+			StartedAt:  startedAt.Add(time.Minute),
 		},
 		Attempt: domain.RequestAttemptInput{
 			ExternalID: "attempt-1",
@@ -183,6 +184,12 @@ func TestPersistRequestAttemptDoesNotClearConversationEndTime(t *testing.T) {
 	}
 	if foundConversation == nil {
 		t.Fatal("expected persisted conversation to exist")
+	}
+	if foundConversation.Status != "completed" {
+		t.Fatalf("expected terminal status to be preserved, got %q", foundConversation.Status)
+	}
+	if !foundConversation.StartedAt.Equal(startedAt) {
+		t.Fatalf("expected earliest started_at to be preserved, got %v", foundConversation.StartedAt)
 	}
 	if foundConversation.EndedAt == nil || !foundConversation.EndedAt.Equal(endedAt) {
 		t.Fatalf("expected ended_at to be preserved, got %+v", foundConversation.EndedAt)

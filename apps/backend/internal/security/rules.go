@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/choegeun-won/terraform-gcp-wireguard-openclaw/apps/backend/internal/domain"
@@ -134,7 +135,7 @@ func (r unpinnedSecretReferenceRule) Evaluate(tfvars map[string]any) []Match {
 		if len(match) == 0 {
 			continue
 		}
-		if match[2] != "" && match[2] != "latest" {
+		if _, err := strconv.Atoi(match[2]); err == nil {
 			continue
 		}
 		findings = append(findings, Match{
